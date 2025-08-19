@@ -5,7 +5,6 @@ local Client = Players.LocalPlayer.PlayerScripts.Client
 local Shared = ReplicatedStorage.Shared
 
 local ReplicaController = require(Client.ReplicaController)
-local BetterReplication = require(Shared.BetterReplication)
 
 local Player = Players.LocalPlayer
 
@@ -39,7 +38,6 @@ while game:IsLoaded() == false do
 	task.wait()
 end
 
-BetterReplication.startInterpolater()
 ReplicaController.RequestData()
 
 return Replication

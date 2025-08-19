@@ -12,12 +12,6 @@ require(Shared.Events)
 require(Server.MarketplaceManager)
 require(Server.SyncedTime)
 require(Server.ServerNetworkManager)
-require(Server.EquipmentManager)
-require(Server.MovementManager)
-require(Server.BetterReplication)
-require(Server.EffectReplicator)
-require(Server.CombatManager)
-require(Server.AITest)
 
 
 local PlayerEntityManager = require(Server.PlayerEntityManager)

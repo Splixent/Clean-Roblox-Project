@@ -24,9 +24,7 @@ local ServerNetworkManager = {
     serverKey = tostring(game.JobId),
     accessCode = nil,
 
-    serverListPlaces = {
-        126755687566466
-    },
+    serverListPlaces = {},
 
     serverListDebounce = {}
 }

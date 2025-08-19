@@ -24,11 +24,6 @@ task.spawn(function()
     repeat task.wait() until Replication:GetInfo("States")
 
     require(Client.UI)
-    require(Client.CameraHandler)
-    require(Client.MovementHandler)
-    require(Client.KeybindHandler)
-    require(Client.MovementReplication)
-    require(Client.CombatHandler)
     
     StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 
