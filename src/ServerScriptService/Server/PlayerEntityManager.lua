@@ -40,8 +40,6 @@ function PlayerEntityManager.SetupCharacter(player: Player?)
 
     character.Parent = game.Workspace.PlayerCharacters
 
-    humanoid.JumpPower = 70
-
     diedMaid:GiveTask(humanoid.Died:Connect(function()
         PlayerEntityManager.OnDied(player)
         diedMaid:Destroy() 
