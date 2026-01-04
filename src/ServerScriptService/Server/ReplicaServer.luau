@@ -85,7 +85,7 @@ MAD STUDIO
 
 ----- Dependencies -----
 
-local ReplicaShared = game.ReplicatedStorage.ReplicaShared
+local ReplicaShared = game.ReplicatedStorage.Shared.ReplicaShared
 local RateLimit = require(ReplicaShared.RateLimit)
 local Remote = require(ReplicaShared.Remote)
 local Signal = require(ReplicaShared.Signal)
@@ -233,6 +233,9 @@ export type Replica = {
 	DontReplicate: (self: any) -> (),
 	Subscribe: (self: any, player: Player) -> (),
 	Unsubscribe: (self: any, player: Player) -> (),
+	OnSet: (self: any, path: {string}, listener: (new_value: any, old_value: any) -> ()) -> (any),
+	OnWrite: (self: any, function_name: string, listener: (...any) -> ()) -> (any),
+	OnChange: (self: any, listener: (action: "Set" | "SetValues" | "TableInsert" | "TableRemove", path: {any}, param1: any, param2: any?) -> ()) -> (any),
 	Identify: (self: any) -> (string),
 	IsActive: (self: any) -> (boolean),
 	Destroy: (self: any) -> (),
@@ -315,6 +318,10 @@ function Replica.New(params: {Token: typeof(ReplicaToken), Tags: {}?, Data: {}?,
 		write_lib_module = params.WriteLib,
 		bind_value = nil,
 		
+		set_listeners = {}, -- {[key]: Signal}
+		write_listeners = {}, -- {[key]: Signal}
+		changed_listeners = Signal.New(),
+		
 	}, Replica)
 	
 	Replicas[Index] = self
@@ -336,6 +343,31 @@ function Replica.Test()
 	}
 end
 
+function Replica:OnSet(path: {string}, listener: (new_value: any, old_value: any) -> ()): any
+	local path_key = table.concat(path, ".")
+	local listeners = self.set_listeners[path_key]
+	if listeners == nil then
+		listeners = Signal.New()
+		self.set_listeners[path_key] = listeners
+	end
+	
+	return listeners:Connect(listener)
+end
+
+function Replica:OnWrite(function_name: string, listener: (...any) -> ()): any
+	local listeners = self.write_listeners[function_name]
+	if listeners == nil then
+		listeners = Signal.New()
+		self.write_listeners[function_name] = listeners
+	end
+	
+	return listeners:Connect(listener)
+end
+
+function Replica:OnChange(listener: (action: "Set" | "SetValues" | "TableInsert" | "TableRemove", path: {string}, param1: any, param2: any?) -> ()): any
+	return self.changed_listeners:Connect(listener)
+end
+
 function Replica:Set(path: {string}, value: any)
 	
 	-- Apply local change:
@@ -344,7 +376,19 @@ function Replica:Set(path: {string}, value: any)
 	for i = 1, #path - 1 do
 		pointer = pointer[path[i]]
 	end
-	pointer[path[#path]] = value
+	local last_key = path[#path]
+	local old_value = pointer[last_key]
+	pointer[last_key] = value
+	
+	-- Fire listeners:
+	
+	if next(self.set_listeners) ~= nil then
+		local listeners = self.set_listeners[table.concat(path, ".")]
+		if listeners ~= nil then
+			listeners:Fire(value, old_value)
+		end
+	end
+	self.changed_listeners:Fire("Set", path, value, old_value)
 	
 	-- Replicate change:
 	
@@ -377,6 +421,10 @@ function Replica:SetValues(path: {string}, values: {[string]: any})
 		pointer[key] = value
 	end
 	
+	-- Fire listeners:
+	
+	self.changed_listeners:Fire("SetValues", path, values)
+	
 	-- Replicate change:
 	
 	if WriteFlag == false then
@@ -408,7 +456,12 @@ function Replica:TableInsert(path: {string}, value: any, index: number?): number
 		table.insert(pointer, index, value)
 	else
 		table.insert(pointer, value)
+		index = #pointer
 	end
+	
+	-- Fire listeners:
+	
+	self.changed_listeners:Fire("TableInsert", path, value, index)
 	
 	-- Replicate change:
 	
@@ -440,6 +493,10 @@ function Replica:TableRemove(path: {string}, index: number): any
 		pointer = pointer[key]
 	end
 	local removed_value = table.remove(pointer, index)
+	
+	-- Fire listeners:
+	
+	self.changed_listeners:Fire("TableRemove", path, removed_value, index)
 	
 	-- Replicate change:
 	
@@ -481,6 +538,13 @@ function Replica:Write(function_name: string, ...): ...any
 	end
 	
 	table.remove(return_params, 1)
+	
+	-- Fire listeners:
+	
+	local listeners = self.write_listeners[function_name]
+	if listeners ~= nil then
+		listeners:Fire(...)
+	end
 	
 	-- Replicate change:
 	

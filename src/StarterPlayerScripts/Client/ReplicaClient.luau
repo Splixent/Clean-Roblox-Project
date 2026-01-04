@@ -67,7 +67,7 @@ MAD STUDIO
 
 ----- Dependencies -----
 
-local ReplicaShared = game.ReplicatedStorage.ReplicaShared
+local ReplicaShared = game.ReplicatedStorage.Shared.ReplicaShared
 local Remote = require(ReplicaShared.Remote)
 local Signal = require(ReplicaShared.Signal)
 local Maid = require(ReplicaShared.Maid)
@@ -84,6 +84,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
 local DataRequestStarted = false
+local NewAnyReplicaListeners = Signal.New() -- Signal for all replicas regardless of token
 
 local TokenReplicas = {} -- {[token]: {[Replica]: true}}
 local Replicas = {} -- {[id]: Replica}
@@ -297,7 +298,33 @@ function Replica.OnNew(token: string, listener: (replica: Replica) -> ()): Signa
 	end
 	
 	return connection
-	
+end
+
+function Replica.OnAny(listener: (replica: Replica) -> ()): Signal.Connection
+
+	local connection = NewAnyReplicaListeners:Connect(listener)
+
+	-- Fire listener for all existing replicas
+	local existing_replicas = {}
+	for _, replica in pairs(Replicas) do
+		table.insert(existing_replicas, replica)
+	end
+
+	if #existing_replicas > 0 then
+		task.defer(function()
+			for _, replica in ipairs(existing_replicas) do
+				if connection.IsConnected ~= true then
+					break
+				end
+				if not FreeRunnerThread then
+					FreeRunnerThread = coroutine.create(RunEventHandlerInFreeThread)
+				end
+				task.spawn(FreeRunnerThread, listener, replica)
+			end
+		end)
+	end
+
+	return connection
 end
 
 function Replica.FromId(id: number): typeof(Replica)?
@@ -573,16 +600,18 @@ local function ReplicaFromBindBuffer(replica, announce_buffer)
 	for group_replica in pairs(replica.Children) do
 		ReplicaFromBindBuffer(group_replica, announce_buffer)
 	end
-	
+
 	if top_call == true then
 		for _, replica in ipairs(announce_buffer) do
+			-- Existing token-specific listeners
 			local listeners = NewReplicaListeners[replica.Token]
 			if listeners ~= nil then
 				listeners:Fire(replica)
 			end
+			-- Add this line for OnAny listeners
+			NewAnyReplicaListeners:Fire(replica)
 		end
 	end
-	
 end
 
 local function CreationScan(nested_creation, iterator, parent_id)
@@ -844,14 +873,15 @@ RemoteCreate.OnClientEvent:Connect(function(creation: {}, root_id: number?) -- (
 		end
 		
 	end)
-	
+
 	for _, replica in ipairs(announce_buffer) do
 		local listeners = NewReplicaListeners[replica.Token]
 		if listeners ~= nil then
 			listeners:Fire(replica)
 		end
+		-- Add this line for OnAny listeners
+		NewAnyReplicaListeners:Fire(replica)
 	end
-
 end)
 
 RemoteBind.OnClientEvent:Connect(function(id: number)

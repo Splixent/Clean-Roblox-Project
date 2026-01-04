@@ -24,5 +24,5 @@ InGame:On(function(player: Player)
     assert(player, "player is nil")
     assert(PlayerEntity, "PlayerEntity is nil")
 
-    PlayerEntity:SetValue({"inGame"}, true)
+    PlayerEntity:Set({"inGame"}, true)
 end)

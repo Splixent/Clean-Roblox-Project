@@ -43,7 +43,7 @@ function MarketplaceManager.ProcessReceipt(reciptInfo)
 				purchaseId = reciptInfo.PurchaseId,
 			})
 
-			playerData:SetValue({ "purchaseHistory" }, purchaseHistory)
+			playerData:Set({ "purchaseHistory" }, purchaseHistory)
 			MarketplaceManager["_" .. reciptInfo.ProductId](player)
 		end
 	end
@@ -67,7 +67,7 @@ function MarketplaceManager:CheckGamepasses(player)
 				local playerData = DataObject.new(player, true)
 
 				if playerData.Replica.Data[gamepassName] == nil then
-					playerData.Replica:SetValue({ gamepassName }, true)
+					playerData.Replica:Set({ gamepassName }, true)
 				end
 			end
 		end

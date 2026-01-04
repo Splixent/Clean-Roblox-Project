@@ -97,7 +97,7 @@ function Datastore:LoadData(player: Player)
 end
 
 function Datastore:SaveData(player: Player)
-    Datastore[player].DataObject.Replica:ListenToRaw(function()
+    Datastore[player].DataObject.Replica:OnChange(function()
         Profiles[player].Data = Datastore[player].DataObject.Replica.Data
         Profiles[player]:Save()
     end)
