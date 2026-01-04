@@ -13,8 +13,7 @@ local Maid = require(Shared.Maid)
 local Datastore = require(Server.Datastore)
 
 local MarketplaceManager = {
-	gamepasses = {
-	},
+	gamepasses = {},
 
 	purchaseInfo = {},
     processes = {}
@@ -56,8 +55,8 @@ end
 
 MarketplaceService.ProcessReceipt = MarketplaceManager.ProcessReceipt
 
-task.spawn(function()
-	for i, player in ipairs(Players:GetPlayers()) do
+function MarketplaceManager:CheckGamepasses(player)
+	task.spawn(function()
 		repeat
 			task.wait()
 		until DataObject[player] ~= nil
@@ -72,24 +71,17 @@ task.spawn(function()
 				end
 			end
 		end
+	end)
+end
+
+task.spawn(function()
+	for i, player in ipairs(Players:GetPlayers()) do
+		MarketplaceManager:CheckGamepasses(player)
 	end
 end)
 
 Players.PlayerAdded:Connect(function(player)
-	repeat
-		task.wait()
-	until DataObject[player] ~= nil
-
-	for gamepassName, gamepassId in pairs(MarketplaceManager.gamepasses) do
-		local ownsGamepass = MarketplaceService:UserOwnsGamePassAsync(player.UserId, gamepassId)
-		if ownsGamepass == true then
-			local playerData = DataObject.new(player, true)
-
-			if playerData.Replica.Data[gamepassName] == nil then
-				playerData.Replica:SetValue({ gamepassName }, true)
-			end
-		end
-	end
+	MarketplaceManager:CheckGamepasses(player)
 end)
 
 return MarketplaceManager

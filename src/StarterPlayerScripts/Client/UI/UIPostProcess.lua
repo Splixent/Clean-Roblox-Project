@@ -11,13 +11,13 @@ local Fusion = require(Shared.Fusion)
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
-local Value = Fusion.Value --test branch update
+local s = Fusion.scoped(Fusion)
 
 local UIPostProcess = {
     scrollingFrameConnections = {},
     scrollFrameMaid = Maid.new(),
     masterUI = nil,
-    viewportSize = Value(Vector2.new(0, 0)),
+    viewportSize = s:Value(Vector2.new(0, 0)),
 
     handlers = {
         {

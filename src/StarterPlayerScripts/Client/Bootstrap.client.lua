@@ -24,7 +24,6 @@ task.spawn(function()
     repeat task.wait() until Replication:GetInfo("States")
 
     require(Client.UI)
-    require(Client.PottersWheelHandler)
     
     StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 

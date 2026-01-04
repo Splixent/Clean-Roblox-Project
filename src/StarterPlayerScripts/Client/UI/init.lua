@@ -4,11 +4,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Client = Players.LocalPlayer.PlayerScripts.Client
 
-local Fusion = require(Shared.Fusion)
+local Fusion, s = require(Shared.Fusion)
 local UIPostProcess = require(script.UIPostProcess)
 
-local New = Fusion.New
 local Children = Fusion.Children
+
+local s = Fusion.scoped(Fusion)
 
 local Player = Players.LocalPlayer
 
@@ -23,12 +24,13 @@ task.spawn(function()
 end)
 
 
-for i, Component in ipairs (script.Components:GetChildren()) do
-    table.insert(UI, require(Component))
+for i, component in ipairs (script.Components:GetChildren()) do
+    table.insert(UI, require(component))
     task.wait(0.33/2)
 end 
 
-local masterUI = New "ScreenGui" {
+
+local masterUI = s:New "ScreenGui" {
     Name = "UI",
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     Parent = Player.PlayerGui,

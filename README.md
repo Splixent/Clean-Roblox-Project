@@ -11,7 +11,7 @@ This project leverages industry-standard frameworks to deliver robust client-ser
 ### [Red](https://red.redblox.dev/guide/events/declaring.html)
 Lightweight, type‑safe signal/event framework for Roblox that keeps server–client communication organized.
 
-### [ReplicaService](https://madstudioroblox.github.io/ReplicaService/api/)
+### [Replica](https://madstudioroblox.github.io/Replica/)
 Structured, schema‑driven data replication with fine‑grained permissions. Perfect for real‑time, authoritative gameplay state.
 
 ### [Fusion](https://elttob.uk/Fusion/0.2/api-reference/)

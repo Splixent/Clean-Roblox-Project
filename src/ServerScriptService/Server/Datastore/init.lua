@@ -22,7 +22,7 @@ local Datastore = {
 local Profiles = {}
 
 Datastore.profileStore = ProfileService.GetProfileStore(
-    "alphaBuild.1",
+    "alpha_0",
     ScriptUtils:DeepCopy(Constants.profileSettings.profileTemplate)
 ).Mock
 
@@ -93,7 +93,7 @@ function Datastore:LoadData(player: Player)
     
     PlayerEntityManager.SetupCharacter(player)
 
-    Datastore[player].PlayerEntity:SetValue({"loaded"}, true)
+    Datastore[player].PlayerEntity:Set({"loaded"}, true)
 end
 
 function Datastore:SaveData(player: Player)
@@ -123,7 +123,6 @@ Players.PlayerRemoving:Connect(function(player: Player?)
 
     if profile then
         profile.Data.loginInfo.totalPlaytime += (os.time() -  profile.Data.loginInfo.lastLogin)
-        
     end
 
     if profile ~= nil then

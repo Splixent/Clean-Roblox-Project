@@ -11,7 +11,6 @@ require(Server.Datastore.DataObject)
 require(Shared.Events)
 require(Server.MarketplaceManager)
 require(Server.SyncedTime)
-require(Server.ServerNetworkManager)
 
 
 local PlayerEntityManager = require(Server.PlayerEntityManager)

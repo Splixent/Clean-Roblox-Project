@@ -25,12 +25,9 @@ local UIUtils = {
 function UIUtils:ToggleUI(targetUIName: string)
     local currentlyVisible = UIUtils.UIVisibility[targetUIName]:get()
     
-    -- Determine next state (flip it)
     local newState = not currentlyVisible
     
-    -- If we want to SHOW the UI (newState == true):
     if newState then
-        -- Hide everything except optional extras
         for name, state in pairs(UIUtils.UIVisibility) do
 
             if name == targetUIName then
@@ -40,13 +37,8 @@ function UIUtils:ToggleUI(targetUIName: string)
             end
         end
     else
-        -- If we are HIDING the target UI
         UIUtils.UIVisibility[targetUIName]:set(false)
     end
 end
-
-task.spawn(function()
-	
-end)
 
 return UIUtils
