@@ -16,6 +16,17 @@ local Constants = {
                 totalPlaytime = 0
             },
             settings = {},
+            plot = "Starter",
+            potteryStations = {
+                ClayPatch = {
+                    level = 0,
+                    clay = 0,
+                },
+                CoolingTable = {level = 0},
+                Kiln = {level = 0},
+                PottersWheel = {level = 0},
+                GlazeTable = {level = 0},
+            }
 		},
 	},
     

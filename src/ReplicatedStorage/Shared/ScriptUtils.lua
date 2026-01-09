@@ -98,7 +98,7 @@ function ScriptUtils:RoundTosignificantFigures(number: number, sigFigs: number):
     return math.floor(number * orderOfMagnitude) / orderOfMagnitude
 end
 
-function ScriptUtils:CreateSpring<T>(s: FusionTypes.Scope<T>, Properties: { Initial: T, Speed: number, Damper: number }): { Value: FusionTypes.Value<T>, Spring: FusionTypes.Spring<T> }
+function ScriptUtils:CreateSpring<T>(s: FusionTypes.Scope<T>, Properties: { initial: T, speed: number, damper: number }): { Value: FusionTypes.Value<T>, Spring: FusionTypes.Spring<T> }
     local SetValue = s:Value(Properties.Initial)
     local SetSpring = s:Spring(SetValue, Properties.Speed, Properties.Damper)
 

@@ -23,8 +23,22 @@ function PlayerEntityManager.new(player: Player?, extraInfo: boolean?): any
             Token = Replica.Token("states"..player.UserId),
             Data = ScriptUtils:DeepCopy(Constants.states),
         })
-        PlayerEntityInfo.Replica:Subscribe(player)
-        PlayerEntityManager[player] = PlayerEntityInfo
+
+        if Replica.ReadyPlayers[player] then
+            PlayerEntityInfo.Replica:Subscribe(player)
+            PlayerEntityManager[player] = PlayerEntityInfo
+        else
+            local readyMaid = Maid.new()
+            readyMaid:GiveTask(Replica.NewReadyPlayer:Connect(function(readyPlayer: Player)
+                if readyPlayer == player then
+                    PlayerEntityInfo.Replica:Subscribe(player)
+                    PlayerEntityManager[player] = PlayerEntityInfo
+                end
+            end))
+
+            repeat task.wait() until PlayerEntityManager[player] ~= nil
+        end
+
     end
     return if extraInfo then PlayerEntityManager[player] else PlayerEntityManager[player].Replica.Data
 end

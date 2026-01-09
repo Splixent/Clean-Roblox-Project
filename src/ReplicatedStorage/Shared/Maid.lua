@@ -15,6 +15,16 @@ function Maid.new()
 	}, Maid)
 end
 
+export type Maid = {
+    ClassName: "Maid",
+    _tasks: {[any]: any},
+
+    GiveTask: (self: Maid, task: any) -> number,
+    GivePromise: (self: Maid, promise: any) -> any,
+    DoCleaning: (self: Maid) -> (),
+    Destroy: (self: Maid) -> (),
+}
+
 function Maid.isMaid(value)
 	return type(value) == "table" and value.ClassName == "Maid"
 end

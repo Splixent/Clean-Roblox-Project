@@ -37,7 +37,10 @@ local masterUI = s:New "ScreenGui" {
     IgnoreGuiInset = true,
 
     [Children] = {
-        UI
+        UI,
+        s:New "Folder" {
+            Name = "ProximityPrompts",
+        },
     }
 }
 UIPostProcess:ViewportChanged(masterUI)

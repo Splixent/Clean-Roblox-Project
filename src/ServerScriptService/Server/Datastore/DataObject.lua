@@ -57,11 +57,9 @@ type PlayerDataObject = {
     Changed: Signal
 }
 
-type DataObjectModule = {
-    [Player]: PlayerDataObject
-}
 
-local DataObject: DataObjectModule = {} :: any
+
+local DataObject= {} :: any
 
 function DataObject.new(player: Player, extraInfo: boolean?, loadedData: {[any]: any}?): PlayerDataObject | {[any]: any}
     assert(player, "player is nil")

@@ -1,0 +1,169 @@
+\documentclass[11pt]{article}
+\usepackage{enumitem}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{sectsty}
+\usepackage{tcolorbox}
+\usepackage{titlesec}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\geometry{margin=0.75in}
+\setlist[itemize]{topsep=2pt, itemsep=1pt, parsep=0pt, leftmargin=*}
+\titlespacing*{\section}{0pt}{8pt}{4pt}
+\titlespacing*{\subsection}{0pt}{6pt}{3pt}
+\titlespacing*{\subsubsection}{0pt}{4pt}{2pt}
+\titlespacing*{\paragraph}{0pt}{3pt}{2pt}
+
+% Define color scheme
+\definecolor{terracotta}{RGB}{191, 85, 60}
+\definecolor{clay}{RGB}{71, 85, 105}
+\definecolor{lightclay}{RGB}{148, 163, 184}
+\definecolor{glaze}{RGB}{59, 130, 246}
+
+% Section styling
+\sectionfont{\color{terracotta}\Large}
+\subsectionfont{\color{clay}\large}
+\subsubsectionfont{\color{glaze}\normalsize}
+
+% Title styling
+\title{\color{terracotta}\textbf{Pottery Game - Planning Document}}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Game Mechanics}
+
+\subsection{Plot}
+
+\subsubsection{Clay Patch}
+\begin{itemize}
+    \item Pick up normal clay from this area to use to make pottery
+\end{itemize}
+
+\subsubsection{Potter's Wheel}
+\begin{itemize}
+    \item Use your clay to create pottery
+    \item Choose what kind of pottery to make from your Potter's Book
+\end{itemize}
+
+\subsubsection{Glaze Table}
+\begin{itemize}
+    \item \textit{[Not sure how this should work completely]}
+    \item Unlocked after completing the tutorial
+    \item Choose what kind of glaze your pottery should have before firing
+\end{itemize}
+
+\subsubsection{Kiln}
+\begin{itemize}
+    \item Used to fire your pottery
+\end{itemize}
+
+\subsubsection{Cooling Table}
+\begin{itemize}
+    \item Pottery must cool down here after firing in the kiln
+    \item Required step before pottery can be moved to showroom
+\end{itemize}
+
+\subsubsection{Showroom}
+\begin{itemize}
+    \item Where completed pottery goes to be purchased by NPCs
+\end{itemize}
+
+\subsection{Inventory System}
+
+\subsubsection{Hotbar}
+\begin{itemize}
+    \item No traditional inventory - just a hotbar for simplicity (2-week project scope)
+    \item Clay stacks in hotbar slots when collected from Clay Patch
+    \item Future: different clay types stack separately
+    \item Future: misc tools in hotbar (heat gloves, glaze tongs, etc.)
+\end{itemize}
+
+\subsubsection{Clay Usage at Potter's Wheel}
+\begin{itemize}
+    \item Select a pottery style from the Potter's Book while at the wheel
+    \item A semi-transparent preview model of the pottery appears on the wheel
+    \item Indicator shows how much clay is required for the selected style
+    \item Click the wheel with stacked clay in hand to deposit clay
+    \item Once enough clay is deposited, the forming minigame begins
+    \item Different pottery styles require different clay amounts
+    \item Future: some pottery requires specific clay types
+\end{itemize}
+
+\subsubsection{Potter's Wheel Minigame}
+\begin{itemize}
+    \item \textbf{Rhythm-based:} Timed button presses as the wheel spins - hit markers as they pass through a zone
+    \item \textbf{Why rhythm works:} Contrasts with spam-click harvesting, feels more skilled/satisfying, matches the spinning wheel aesthetic
+    \item Success quality affects pottery value/appearance
+    \item Higher level pottery = faster/more complex patterns
+\end{itemize}
+
+\subsection{Potter Level / Achievements}
+\begin{itemize}
+    \item Potter Level increases as you complete achievements in your Achievements Book
+    \item Some Pottery Styles and Glazes are locked behind Level requirements
+\end{itemize}
+
+\subsection{Plot Upgrades}
+
+\subsubsection{Pottery Station Upgrades}
+\begin{itemize}
+    \item All Stations start at level 0
+    \item Upgrades require a minimum level \& Nyra (₦)
+\end{itemize}
+
+\paragraph{Clay Patch Upgrades}
+\begin{itemize}
+    \item More clay per harvest
+    \item Faster replenish time
+    \item Higher clay storage cap
+\end{itemize}
+
+\paragraph{Potter's Wheel Upgrades}
+\begin{itemize}
+    \item Faster shaping time
+    \item Unlocks Pottery Styles at certain levels
+\end{itemize}
+
+\paragraph{Glaze Table Upgrades}
+\begin{itemize}
+    \item \textit{[To be determined]}
+\end{itemize}
+
+\paragraph{Kiln Upgrades}
+\begin{itemize}
+    \item Faster firing time
+    \item Larger batch capacity
+\end{itemize}
+
+\paragraph{Cooling Table Upgrades}
+\begin{itemize}
+    \item Faster cooling time
+    \item Increased cooling slots
+\end{itemize}
+
+\subsubsection{Plot Theme Upgrades}
+\begin{itemize}
+    \item Plot starts small and simple with dirt floor
+    \item Unlock cosmetic plot themes that transform the entire workspace aesthetic
+    \item All themes accommodate all crafting stations (Clay Patch, Potter's Wheel, Glaze Table, Kiln, Cooling Table, Showroom)
+    \item Each theme features a unique showroom design - the primary visual flex for other players
+    \item Example themes:
+    \begin{itemize}
+        \item Pink Pottery Factory - cute, modern aesthetic
+        \item Industrial Workshop - gritty, factory vibe
+        \item \textit{[More themes to be designed]}
+    \end{itemize}
+    \item Themes are primarily cosmetic but serve as status symbols to show off progression
+\end{itemize}
+
+\section{UI Style}
+\textit{[To be determined]}
+
+\section{Update Schedule}
+\textit{[To be determined]}
+
+\end{document}

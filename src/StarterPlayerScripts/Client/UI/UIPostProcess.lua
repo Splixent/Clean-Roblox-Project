@@ -52,7 +52,7 @@ local UIPostProcess = {
                     originalCellSize.Y.Scale, originalCellSize.Y.Offset * context.uniformScale)
             end
         },
-        {
+        --[[{
             condition = function(object)
                 return object:IsA("UIStroke")
             end,
@@ -63,7 +63,7 @@ local UIPostProcess = {
                 end
                 object.Thickness = object:GetAttribute("original") * context.viewportSize.Y / 1080
             end
-        },
+        },]]
         {
             condition = function(object)
                 return object:IsA("UIListLayout")

@@ -24,6 +24,9 @@ task.spawn(function()
     repeat task.wait() until Replication:GetInfo("States")
 
     require(Client.UI)
+    require(Client.ProximityPromptHandler)
+    require(Client.PlotHandler)
+    require(Client.StationHandler)
     
     StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 
