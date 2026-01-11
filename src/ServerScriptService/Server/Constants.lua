@@ -26,13 +26,20 @@ local Constants = {
                 Kiln = {level = 0},
                 PottersWheel = {level = 0},
                 GlazeTable = {level = 0},
-            }
+            },
+            inventory = {
+                hotbar = {},
+                items = {}
+            },
 		},
+
 	},
     
     states = {
         loaded = false,
         inGame = false,
+
+        equippedItem = nil,
     }
 }
 

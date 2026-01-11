@@ -27,8 +27,11 @@ task.spawn(function()
     require(Client.ProximityPromptHandler)
     require(Client.PlotHandler)
     require(Client.StationHandler)
+    require(Client.ItemsHandler)
+	require(Shared.Cmdr.Setup)
     
     StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+    StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 
     if Replication:GetInfo("States").loaded == false then
         Replication.LoadedChanged(function(NewValue)

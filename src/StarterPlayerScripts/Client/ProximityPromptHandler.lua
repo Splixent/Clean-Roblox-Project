@@ -24,15 +24,18 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Stack configuration
 local STACK_KEYS = {
-	{ keyboard = Enum.KeyCode.E, gamepad = Enum.KeyCode.ButtonX, display = "E", gamepadDisplay = "X" },
-	{ keyboard = Enum.KeyCode.R, gamepad = Enum.KeyCode.ButtonY, display = "R", gamepadDisplay = "Y" },
-	{ keyboard = Enum.KeyCode.F, gamepad = Enum.KeyCode.ButtonA, display = "F", gamepadDisplay = "A" },
-	{ keyboard = Enum.KeyCode.C, gamepad = Enum.KeyCode.ButtonB, display = "C", gamepadDisplay = "B" },
+	{ keyboard = Enum.KeyCode.E, gamepad = Enum.KeyCode.DPadUp, display = "E", gamepadDisplay = "▲" },
+	{ keyboard = Enum.KeyCode.R, gamepad = Enum.KeyCode.DPadRight, display = "R", gamepadDisplay = "►" },
+	{ keyboard = Enum.KeyCode.F, gamepad = Enum.KeyCode.DPadDown, display = "F", gamepadDisplay = "▼" },
+	{ keyboard = Enum.KeyCode.C, gamepad = Enum.KeyCode.DPadLeft, display = "C", gamepadDisplay = "◄" },
 }
 local STACK_OFFSET = 1.5 -- Studs between stacked prompts
 local SIMPLE_STACK_GAP = 1.5 -- Vertical gap between simple prompts in their stack
 local SIMPLE_HORIZONTAL_OFFSET = 5.8 -- Studs to push simple prompts to the right
 local SIMPLE_VERTICAL_OFFSET = 0 -- Base vertical offset for all simple prompts (positive = up, negative = down)
+
+-- Dynamic offset adjustment (can be modified externally)
+local SimpleHorizontalOffsetAdjustment = 0.1 -- Added to SIMPLE_HORIZONTAL_OFFSET when calculating position
 
 -- Static registry for all active prompts
 local ActivePrompts = {} -- { [prompt] = ProximityPromptManager }
@@ -311,6 +314,7 @@ function ProximityPromptManager.new(parent: Instance, promptData: PromptData)
 	self._promptScale = s:Value(1)
 	self._stackOffset = s:Value(0) -- Y offset for stacking
 	self._stackHorizontalOffset = s:Value(0) -- X offset for simple prompt horizontal alignment
+	self._customHorizontalOffset = 0 -- Per-prompt adjustment (added to base offset)
 	self._isHoldingButton = false
 	self._hasTriggered = false -- Prevents re-triggering while key is still held
 	self._onCooldown = false -- Blocks all interaction during cooldown
@@ -925,7 +929,8 @@ function ProximityPromptManager:_setStackPosition(position: number, stackIndex: 
 		local stackOffset = (totalPrompts - position) * SIMPLE_STACK_GAP
 		self._stackOffset:set(SIMPLE_VERTICAL_OFFSET + stackOffset) -- Base offset + stacking
 		local horizontalDir = self._left and -1 or 1
-		self._stackHorizontalOffset:set(SIMPLE_HORIZONTAL_OFFSET * horizontalDir) -- Push to the right or left
+		local totalHorizontalOffset = SIMPLE_HORIZONTAL_OFFSET + SimpleHorizontalOffsetAdjustment + self._customHorizontalOffset
+		self._stackHorizontalOffset:set(totalHorizontalOffset * horizontalDir) -- Push to the right or left
 	else
 		-- Regular prompts: vertically stacked (position 1 = top = highest offset)
 		local offset = (totalPrompts - position) * STACK_OFFSET
@@ -1128,5 +1133,51 @@ task.spawn(function()
 		end
 	end
 end)
+
+--[=[
+	Sets an additional horizontal offset for simple prompts (to make room for other UI elements)
+	@param offset number -- Additional studs to add to SIMPLE_HORIZONTAL_OFFSET
+]=]
+function ProximityPromptManager.SetSimpleHorizontalOffset(offset: number)
+	SimpleHorizontalOffsetAdjustment = offset
+	-- Update all active simple prompts
+	for _, manager in pairs(ActivePrompts) do
+		if manager._simple and WantsToBeVisible[manager] then
+			local horizontalDir = manager._left and -1 or 1
+			local totalHorizontalOffset = SIMPLE_HORIZONTAL_OFFSET + SimpleHorizontalOffsetAdjustment
+			manager._stackHorizontalOffset:set(totalHorizontalOffset * horizontalDir)
+		end
+	end
+end
+
+--[=[
+	Gets the current simple horizontal offset adjustment
+	@return number
+]=]
+function ProximityPromptManager.GetSimpleHorizontalOffset(): number
+	return SimpleHorizontalOffsetAdjustment
+end
+
+--[=[
+	Sets a custom horizontal offset adjustment for this specific prompt
+	@param offset number -- Additional studs to add to this prompt's horizontal offset
+]=]
+function ProximityPromptManager:SetCustomHorizontalOffset(offset: number)
+	self._customHorizontalOffset = offset
+	-- Immediately update the position if this is a simple prompt
+	if self._simple and self._isVisible then
+		local horizontalDir = self._left and -1 or 1
+		local totalHorizontalOffset = SIMPLE_HORIZONTAL_OFFSET + SimpleHorizontalOffsetAdjustment + self._customHorizontalOffset
+		self._stackHorizontalOffset:set(totalHorizontalOffset * horizontalDir)
+	end
+end
+
+--[=[
+	Gets the custom horizontal offset for this specific prompt
+	@return number
+]=]
+function ProximityPromptManager:GetCustomHorizontalOffset(): number
+	return self._customHorizontalOffset
+end
 
 return ProximityPromptManager
