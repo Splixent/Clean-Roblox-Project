@@ -27,10 +27,16 @@ local Constants = {
                 PottersWheel = {level = 0},
                 GlazeTable = {level = 0},
             },
-            inventory = {
-                hotbar = {},
-                items = {}
-            },
+            inventory =  {
+                hotbar =  {
+                   "Clay"
+                },
+                items =  {
+                    Clay =  {
+                        amount = 50
+                    }
+                }
+            }
 		},
 
 	},

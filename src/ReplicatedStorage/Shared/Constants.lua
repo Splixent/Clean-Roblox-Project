@@ -1,6 +1,5 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local alias = require(ReplicatedStorage.Shared.Cmdr.BuiltInCommands.Utility.alias)
 local SharedConstants = {
 
     potteryStationInfo = {
@@ -22,6 +21,7 @@ local SharedConstants = {
     itemData = {
         Clay = {
             displayName = "Clay",
+            itemType = "clay",
             clayType = "normal",
             description = "A lump of clay, ready to be shaped into pottery.",
             maxStackSize = 999,
@@ -36,6 +36,7 @@ local SharedConstants = {
             rarity = "Common",
             description = "A simple bowl made of clay.",
             sectionType = "Bowls",
+            clayType = "normal", -- Required clay type
             cost = { clay = 5 }
         },
 

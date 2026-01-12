@@ -77,8 +77,6 @@ end
 -- Initialize
 task.spawn(function()
     repeat task.wait() until PlotHandler:GetPlot() ~= nil
-    
-    print("[PlotHandler] Found plot, setting up stations...")
     PlotHandler:SetupPlotStations()
 end)
 

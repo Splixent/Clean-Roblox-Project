@@ -314,7 +314,7 @@ function ProximityPromptManager.new(parent: Instance, promptData: PromptData)
 	self._promptScale = s:Value(1)
 	self._stackOffset = s:Value(0) -- Y offset for stacking
 	self._stackHorizontalOffset = s:Value(0) -- X offset for simple prompt horizontal alignment
-	self._customHorizontalOffset = 0 -- Per-prompt adjustment (added to base offset)
+	self._customHorizontalOffset = promptData.customHorizontalOffset or 0 -- Per-prompt adjustment (added to base offset)
 	self._isHoldingButton = false
 	self._hasTriggered = false -- Prevents re-triggering while key is still held
 	self._onCooldown = false -- Blocks all interaction during cooldown

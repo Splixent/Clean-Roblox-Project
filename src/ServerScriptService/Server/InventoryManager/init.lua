@@ -60,6 +60,7 @@ function InventoryManager:AddItem(player: Player, itemName: string, quantity: nu
         end     
     end
 
+    print(inventory)
     playerData:Set({"inventory"}, inventory)
 end
 
@@ -105,11 +106,12 @@ function InventoryManager:ConsumeItem(player: Player, itemName: string, amount: 
         
         -- Unequip if this was the equipped item
         local playerStates = PlayerEntityManager.new(player, true).Replica
-        if playerStates.Data.equippedItem == itemName then
+        local equippedItem = playerStates.Data.equippedItem
+        if equippedItem and equippedItem.itemName == itemName then
             self:UnequipItem(player)
         end
     end
-    
+
     playerData:Set({"inventory"}, inventory)
     return true
 end
@@ -141,9 +143,11 @@ function InventoryManager:EquipItem(player: Player, itemName: string)
     self.PlayerItems[player] = itemInstance
     itemInstance:Equip()
     
-    -- Update player state
+    -- Update player state - store itemName along with item data for easy lookup
     local playerStates = PlayerEntityManager.new(player, true).Replica
-    playerStates:Set({"equippedItem"}, itemName)
+    local equippedData = table.clone(SharedConstants.itemData[itemName])
+    equippedData.itemName = itemName -- Store the item name for comparison
+    playerStates:Set({"equippedItem"}, equippedData)
 end
 
 function InventoryManager:UnequipItem(player: Player)

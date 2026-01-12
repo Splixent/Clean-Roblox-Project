@@ -14,6 +14,7 @@ local Replica = require(Server.ReplicaServer)
 local Events = require(Shared.Events)
 local SharedConstants = require(Shared.Constants)
 local InventoryManager = require(Server.InventoryManager)
+local PlayerEntityManager = require(Server.PlayerEntityManager)
 
 local HarvestClay = Events.HarvestClay
 
@@ -46,7 +47,7 @@ function StationManager:SetupStation(player, stationModel)
         end
         StationManager.playerStations[player][stationType] = stationInstance
     else
-        warn(`StationManager: Unknown station type '{stationType}' for station '{stationModel.Name}'`)
+        --warn(`StationManager: Unknown station type '{stationType}' for station '{stationModel.Name}'`)
     end
 end
 
@@ -80,8 +81,6 @@ HarvestClay:SetCallback(function(player: Player)
 
     playerData:Set({"potteryStations", "ClayPatch", "clay"}, clayPatchInstance.__attributes.Clay)
 
-    --award clay to player (implementation depends on inventory system)
-
     print(`{player.Name} harvested {clayToGive} clay from their Clay Patch.`)
 
     InventoryManager:AddItem(player, "Clay", clayToGive)
@@ -95,63 +94,120 @@ local InsertClay = Events.InsertClay
 InsertClay:SetCallback(function(player: Player, stationId: string, styleKey: string)
     -- Validate inputs
     if not stationId or not styleKey then
-        return "InvalidInput"
+        return { success = false, error = "InvalidInput" }
     end
     
     -- Get player data
     local playerData = DataObject.new(player, true).Replica
     if not playerData then
-        return "NoPlayerData"
+        return { success = false, error = "NoPlayerData" }
     end
     
     -- Get style data
     local styleData = SharedConstants.pottteryData and SharedConstants.pottteryData[styleKey]
     if not styleData then
-        return "InvalidStyle"
+        return { success = false, error = "InvalidStyle" }
     end
     
-    -- Get clay cost
-    local clayCost = styleData.cost and styleData.cost.clay or 0
-    
-    -- Check if player is holding clay (check equipped item)
-    local equippedItem = playerData.Data.equippedItem
-    if not equippedItem or equippedItem.itemType ~= "Clay" then
-        return "NotHoldingClay"
-    end
-    
-    -- Check if player has enough clay in hand
-    local heldClayAmount = equippedItem.amount or 0
-    if heldClayAmount < clayCost then
-        return "NotEnoughClay"
-    end
-    
-    -- Check clay type matches (if style requires specific clay type)
+    -- Get required clay type and amount
     local requiredClayType = styleData.clayType or "normal"
-    local heldClayType = equippedItem.clayType or "normal"
-    if requiredClayType ~= heldClayType then
-        return "WrongClayType"
+    local requiredClayAmount = styleData.cost and styleData.cost.clay or 0
+    
+    -- Find the item name that matches the clay type
+    local clayItemName = nil
+    for itemName, itemInfo in pairs(SharedConstants.itemData) do
+        if itemInfo.itemType == "clay" and itemInfo.clayType == requiredClayType then
+            clayItemName = itemName
+            break
+        end
     end
     
-    -- Deduct clay from player's held item
-    local newAmount = heldClayAmount - clayCost
-    if newAmount <= 0 then
-        -- Remove equipped item entirely
-        playerData:Set({"equippedItem"}, nil)
+    if not clayItemName then
+        return { success = false, error = "NoClayItemForType" }
+    end
+    
+    -- Check if player has any clay of the required type
+    local inventory = playerData.Data.inventory
+    local playerClayInfo = inventory and inventory.items and inventory.items[clayItemName]
+    local playerClayAmount = playerClayInfo and playerClayInfo.amount or 0
+    
+    if playerClayAmount <= 0 then
+        return { success = false, error = "NoClay", currentClay = 0, requiredClay = requiredClayAmount }
+    end
+    
+    -- Get or create the PottersWheel station data for this player
+    local pottersWheelInstance = StationManager.playerStations[player] and StationManager.playerStations[player]["PottersWheel"]
+    
+    -- Get current insertion progress (stored on station or in player data)
+    -- We'll use playerData to track insertion progress per station
+    local insertionProgress = playerData.Data.potteryInsertion or {}
+    local stationProgress = insertionProgress[stationId] or {
+        styleKey = styleKey,
+        insertedClay = 0,
+        requiredClay = requiredClayAmount,
+        clayType = requiredClayType,
+    }
+    
+    -- If style changed, reset progress
+    if stationProgress.styleKey ~= styleKey then
+        stationProgress = {
+            styleKey = styleKey,
+            insertedClay = 0,
+            requiredClay = requiredClayAmount,
+            clayType = requiredClayType,
+        }
+    end
+    
+    -- Calculate how much clay to insert
+    local clayNeeded = stationProgress.requiredClay - stationProgress.insertedClay
+    local clayToInsert = math.min(playerClayAmount, clayNeeded)
+    
+    if clayToInsert <= 0 then
+        -- Already fully inserted
+        return { 
+            success = true, 
+            complete = true, 
+            insertedClay = stationProgress.insertedClay, 
+            requiredClay = stationProgress.requiredClay 
+        }
+    end
+    
+    -- Consume clay from inventory
+    local consumed = InventoryManager:ConsumeItem(player, clayItemName, clayToInsert)
+    if not consumed then
+        return { success = false, error = "FailedToConsume" }
+    end
+    
+    -- Update insertion progress
+    stationProgress.insertedClay = stationProgress.insertedClay + clayToInsert
+    insertionProgress[stationId] = stationProgress
+    playerData:Set({"potteryInsertion"}, insertionProgress)
+    
+    -- Check if insertion is complete
+    local isComplete = stationProgress.insertedClay >= stationProgress.requiredClay
+    
+    if isComplete then
+        -- Clear insertion progress for this station
+        insertionProgress[stationId] = nil
+        playerData:Set({"potteryInsertion"}, insertionProgress)
+        
+        -- TODO: Start pottery creation process
+        -- 1. Set wheel state to "creating"
+        -- 2. Make preview model solid
+        -- 3. Start minigame/animation
+        
+        print(`{player.Name} completed clay insertion for {styleData.name} ({stationProgress.insertedClay}/{stationProgress.requiredClay} clay)`)
     else
-        -- Update amount
-        playerData:Set({"equippedItem", "amount"}, newAmount)
+        print(`{player.Name} inserted {clayToInsert} clay for {styleData.name} ({stationProgress.insertedClay}/{stationProgress.requiredClay})`)
     end
     
-    -- TODO: Start pottery creation process on the PottersWheel
-    -- This would involve:
-    -- 1. Setting the wheel's state to "creating"
-    -- 2. Storing the selected style
-    -- 3. Making the preview model solid (transparency 0)
-    -- 4. Starting any minigame/animation
-    
-    print(`{player.Name} inserted {clayCost} clay to create {styleData.name}`)
-    
-    return "Success"
+    return { 
+        success = true, 
+        complete = isComplete,
+        insertedClay = stationProgress.insertedClay,
+        requiredClay = stationProgress.requiredClay,
+        clayInsertedThisTime = clayToInsert,
+    }
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)

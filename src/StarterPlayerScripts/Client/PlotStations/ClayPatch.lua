@@ -23,7 +23,6 @@ function ClayPatch.new(ownerPlayer: Player, stationModel: Model)
     setmetatable(self, ClayPatch)
 
     self.visualMaid = Maid.new()
-    print(self.ownerPlayer.UserId == self.player.UserId)
     if self.ownerPlayer.UserId == self.player.UserId then
         self:SetupInteraction()
     end

@@ -13,7 +13,6 @@ if RunService:IsServer() then
     Cmdr:RegisterCommandsIn(Commands)
     Cmdr:RegisterHooksIn(Hooks)
 elseif RunService:IsClient() then
-    print("?")
 	require(ReplicatedStorage:WaitForChild("CmdrClient")):SetActivationKeys({ Enum.KeyCode.Semicolon })
 end
 
