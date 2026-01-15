@@ -21,41 +21,58 @@ local StationHandlers = {
 }
 
 
-function StationHandler:SetupStation(ownerPlayer: Player, stationData: any)
+function StationHandler:SetupStation(stationKey: string, stationData: any)
+    local ownerUserId = stationKey:match("^(%-?%d+)_(.+)$")
+    
+    local ownerPlayer = Players:GetPlayerByUserId(tonumber(ownerUserId))
+    if not ownerPlayer then
+        warn("StationHandler: Could not find player with UserId", stationKey)
+        return
+    end
+    
+    print(stationData.stationType)
     local stationInstance = StationHandlers[stationData.stationType].new(ownerPlayer, stationData.model)
     stationInstance:SetupVisuals()
+    if not self.clientStations[ownerUserId] then
+        self.clientStations[ownerUserId] = {}
+    end
+    self.clientStations[ownerUserId][stationData.stationType] = stationInstance
 end
 
-function StationHandler:RemoveStation(ownerPlayer: Player, stationData: any)
-    local stationInstance = self.clientStations[ownerPlayer][stationData.stationType]
+function StationHandler:RemoveStation(stationKey: string, stationData: any)
+    local ownerUserId = stationKey:match("^(%-?%d+)_(.+)$")
+    local stationInstance = self.clientStations[ownerUserId] and self.clientStations[ownerUserId][stationData.stationType]
     if stationInstance then
         stationInstance:Destroy()
-        self.clientStations[ownerPlayer][stationData.stationType] = nil
+        self.clientStations[ownerUserId][stationData.stationType] = nil
     end
 end
 
 task.spawn(function()
     repeat task.wait() until Replication.PotteryStations
 
+    -- Set up initial stations first, BEFORE setting up the OnSet listener
+    for ownerUserId, stationData in pairs(Replication.PotteryStations.Data.activeStations) do
+        StationHandler:SetupStation(ownerUserId, stationData)        
+    end
+
+    -- Now listen for changes (new stations added or removed after initial load)
     Replication.PotteryStations:OnSet({"activeStations"}, function(newActiveStations, oldActiveStations)
-        for plrInstance, stationData in pairs (newActiveStations) do
-            if not oldActiveStations or not oldActiveStations[plrInstance] then
-                StationHandler:SetupStation(plrInstance, stationData)
+        -- Only process if we have old data to compare (skip initial fire)
+        if not oldActiveStations then return end
+        
+        for stationKey, stationData in pairs(newActiveStations) do
+            if not oldActiveStations[stationKey] then
+                StationHandler:SetupStation(stationKey, stationData)
             end
         end
 
-        if oldActiveStations then
-            for plrInstance, stationData in pairs (oldActiveStations) do
-                if not newActiveStations[plrInstance] then
-                    StationHandler:RemoveStation(plrInstance, stationData)
-                end
+        for stationKey, stationData in pairs(oldActiveStations) do
+            if not newActiveStations[stationKey] then
+                StationHandler:RemoveStation(stationKey, stationData)
             end
         end
     end)
-
-    for plrInstance, stationData in pairs (Replication.PotteryStations.Data.activeStations) do
-        StationHandler:SetupStation(plrInstance, stationData)        
-    end
 
 end)
 

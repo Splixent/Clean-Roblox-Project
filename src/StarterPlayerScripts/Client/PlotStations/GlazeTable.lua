@@ -14,7 +14,15 @@ setmetatable(GlazeTable, PlotStation)
 function GlazeTable.new(player: Player, stationModel: Model)
     local self = PlotStation.new(player, stationModel)
     setmetatable(self, GlazeTable)
-    self:SetupInteraction()
+    
+    -- Track if this client is the owner
+    self.isOwner = self.ownerPlayer.UserId == self.player.UserId
+    
+    -- Only setup interaction for the owner
+    if self.isOwner then
+        self:SetupInteraction()
+    end
+    
     return self
 end
 
@@ -39,12 +47,12 @@ function GlazeTable:SetupInteraction()
     })
 end
 
+function GlazeTable:SetupVisuals() end
+
 function GlazeTable:OnUpgradeTriggered(player: Player)
-    print(player.Name .. " wants to upgrade the Glaze Table")
 end
 
 function GlazeTable:OnTriggered(player: Player)
-    print(player.Name .. " wants to glaze pottery at level " .. self.data.level .. " Glaze Table ")
 end
 
 function GlazeTable:Destroy()

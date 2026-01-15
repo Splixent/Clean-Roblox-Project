@@ -60,7 +60,6 @@ function PlotManager:AssignPlot(player): {After: (callback: (freePlot: Model) ->
 	local freePlot = PlotManager:GetPlot()
 	if freePlot then
 		freePlot:SetAttribute("Owner", player.UserId)
-		print("Assigned plot " .. freePlot.Name .. " to player " .. player.Name)
 	else
 		player:Kick("No free plots available.")
 	end
@@ -77,7 +76,6 @@ end
 function PlotManager:SetupPlayer(player)
     PlotManager:AssignPlot(player).After(function(freePlot)
 		PlotManager:LoadPlot(player, freePlot)
-        print("Loaded plot")
     end)
 end
 

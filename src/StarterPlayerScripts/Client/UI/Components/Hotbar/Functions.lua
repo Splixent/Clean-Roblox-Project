@@ -45,7 +45,7 @@ Functions.EquippedSlot = scope:Value(0)
 
 -- Current item name flash target for the global label
 Functions.CurrentItemFlashTarget = scope:Value(1)
-Functions.CurrentItemTransparency = scope:Spring(Functions.CurrentItemFlashTarget, 15, 0.6)
+Functions.CurrentItemTransparency = scope:Spring(Functions.CurrentItemFlashTarget, 2, 0.6)
 
 -- Store reactive values for each slot
 Functions.Slots = {}
@@ -74,7 +74,52 @@ Functions.CurrentItemDisplayName = scope:Computed(function(use)
     return ""
 end)
 
+-- Extract the style key from a pottery item key (e.g., "bowl_1" -> "bowl")
+-- Returns the original key if it's not a pottery item with unique ID
+function Functions:GetStyleKey(itemName: string): string
+    -- Check if this is a unique pottery key (has _N suffix)
+    local styleKey = itemName:match("^(.+)_%d+$")
+    if styleKey and SharedConstants.pottteryData and SharedConstants.pottteryData[styleKey] then
+        return styleKey
+    end
+    -- Not a unique pottery key, return as-is
+    return itemName
+end
+
 function Functions:GetDisplayName(itemName: string): string
+    -- Get the style key for pottery items with unique IDs
+    local styleKey = self:GetStyleKey(itemName)
+    
+    -- First check potteryData for pottery items
+    local potteryData = SharedConstants.pottteryData and SharedConstants.pottteryData[styleKey]
+    if potteryData and potteryData.name then
+        -- Get the item's state from inventory to determine prefix
+        local playerData = Replication:GetInfo("Data")
+        local inventory = playerData and playerData.inventory
+        local itemInfo = inventory and inventory.items and inventory.items[itemName]
+        
+        if itemInfo then
+            -- Determine prefix based on pottery state
+            if itemInfo.cooled then
+                -- Fully finished - no prefix
+                return potteryData.name
+            elseif itemInfo.fired then
+                -- Fired but not cooled
+                return "Hot " .. potteryData.name
+            elseif itemInfo.dried then
+                -- Dried but not fired
+                return "Unfired " .. potteryData.name
+            else
+                -- Not dried yet (fresh from wheel or taken off table early)
+                return "Damp " .. potteryData.name
+            end
+        end
+        
+        -- Fallback if no item info found
+        return potteryData.name
+    end
+    
+    -- Fall back to itemData for regular items
     local itemData = SharedConstants.itemData[itemName]
     if itemData and itemData.displayName then
         return itemData.displayName
@@ -95,10 +140,7 @@ function Functions:EquipSlot(slotNumber: number)
             EquipItem:Fire(slotNumber)
             
             -- Flash the current item name
-            self.CurrentItemFlashTarget:set(0.25)
-            task.delay(1, function()
-                self.CurrentItemFlashTarget:set(1)
-            end)
+            self.CurrentItemTransparency:setPosition(0.1)
         end
     end
 end
@@ -115,7 +157,9 @@ function Functions:UpdateHotbar(inventory)
         
         if itemName and items[itemName] then
             local itemInfo = items[itemName]
-            local amount = itemInfo.amount or 0
+            
+            -- Pottery items don't have amount, they just exist
+            local amount = itemInfo.amount or (itemInfo.potteryStyle and 1 or 0)
             
             slot.ItemName:set(itemName)
             slot.Amount:set(amount)
@@ -139,8 +183,26 @@ function Functions:CreateSlot(slotIndex: number)
         return tostring(use(slotData.Amount))
     end)
     
+    -- Check if this item is a pottery item (non-stackable)
+    -- Uses GetStyleKey to handle unique pottery keys like "bowl_1"
+    local isPottery = scope:Computed(function(use)
+        local itemName = use(slotData.ItemName)
+        local styleKey = Functions:GetStyleKey(itemName)
+        -- Pottery items are in pottteryData, not itemData
+        return SharedConstants.pottteryData and SharedConstants.pottteryData[styleKey] ~= nil
+    end)
+    
     local itemIcon = scope:Computed(function(use)
         local itemName = use(slotData.ItemName)
+        local styleKey = Functions:GetStyleKey(itemName)
+        
+        -- First check potteryData for pottery items (using style key for unique IDs)
+        local potteryData = SharedConstants.pottteryData and SharedConstants.pottteryData[styleKey]
+        if potteryData and potteryData.icon then
+            return potteryData.icon
+        end
+        
+        -- Fall back to itemData for regular items
         local itemData = SharedConstants.itemData[itemName]
         if itemData and itemData.icon then
             return itemData.icon
@@ -227,6 +289,10 @@ function Functions:CreateSlot(slotIndex: number)
                 Text = amountText,
                 TextColor3 = Color3.new(1, 1, 1),
                 TextScaled = true,
+                -- Hide amount for pottery items (non-stackable)
+                Visible = scope:Computed(function(use)
+                    return not use(isPottery)
+                end),
                 ZIndex = 6,
 
                 [Children] = {

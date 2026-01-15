@@ -5,4 +5,5 @@
 return {
     BaseItem = require(script.BaseItem),
     Clay = require(script.Clay),
+    PotteryStyle = require(script.PotteryStyle),
 }

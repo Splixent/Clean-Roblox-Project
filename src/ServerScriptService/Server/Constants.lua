@@ -22,7 +22,12 @@ local Constants = {
                     level = 0,
                     clay = 0,
                 },
-                CoolingTable = {level = 0},
+                CoolingTable = {
+                    level = 0,
+                    coolingPottery = {
+                        
+                    }
+                },
                 Kiln = {level = 0},
                 PottersWheel = {level = 0},
                 GlazeTable = {level = 0},

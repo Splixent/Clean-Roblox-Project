@@ -118,13 +118,17 @@ local UIPostProcess = {
                 return object:IsA("ScrollingFrame")
             end,
             action = function(scrollingFrame, context)
-                if scrollingFrame.name == "ScrollingFrame_Ignore" then return end
+                if scrollingFrame.Name == "ScrollingFrame_Ignore" then return end
                 -- Find UIListLayout or UIGridLayout within the ScrollingFrame
                 local UIConstraint = scrollingFrame:FindFirstChildOfClass("UIListLayout") or scrollingFrame:FindFirstChildOfClass("UIGridLayout")
                 task.delay(1, function()
                     if UIConstraint then
                         task.wait(1)
-                        scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, UIConstraint.AbsoluteContentSize.Y * 1.1)
+                        if scrollingFrame.Name == "ScrollingFrame_Horizontal" then
+                            scrollingFrame.CanvasSize = UDim2.new(0, UIConstraint.AbsoluteContentSize.X * 1.1, 0, 0)
+                        else
+                            scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, UIConstraint.AbsoluteContentSize.Y * 1.1)
+                        end
                     end
                 end)
             end

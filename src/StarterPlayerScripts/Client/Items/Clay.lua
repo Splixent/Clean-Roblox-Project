@@ -20,18 +20,12 @@ function Clay.new()
 end
 
 function Clay:OnEquip()
-    print(`[Clay Client] Equipped by {Player.Name}`)
-    -- Add client-side feedback here (equip sound, particles, etc.)
 end
 
 function Clay:OnUnequip()
-    print(`[Clay Client] Unequipped by {Player.Name}`)
-    -- Add client-side feedback here (unequip sound, etc.)
 end
 
 function Clay:OnActivate()
-    print(`[Clay Client] Activated by {Player.Name}`)
-    -- Add client-side feedback here (use sound, particles, etc.)
 end
 
 return Clay

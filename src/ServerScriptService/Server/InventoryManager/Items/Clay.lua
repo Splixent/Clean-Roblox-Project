@@ -20,17 +20,12 @@ function Clay.new(player: Player)
 end
 
 function Clay:OnEquip()
-    print(`[Clay] {self.Player.Name} equipped Clay`)
 end
 
 function Clay:OnUnequip()
-    print(`[Clay] {self.Player.Name} unequipped Clay`)
 end
 
 function Clay:OnActivate()
-    print(`[Clay] {self.Player.Name} activated Clay`)
-    -- Add Clay-specific activation logic here
-    -- e.g., placing clay on a potter's wheel
 end
 
 return Clay

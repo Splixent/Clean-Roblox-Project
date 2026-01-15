@@ -92,15 +92,12 @@ end
 
 -- Override these in subclasses
 function BaseItem:OnEquip()
-    print(`[BaseItem] {self.Player.Name} equipped {self.ItemName}`)
 end
 
 function BaseItem:OnUnequip()
-    print(`[BaseItem] {self.Player.Name} unequipped {self.ItemName}`)
 end
 
 function BaseItem:OnActivate()
-    print(`[BaseItem] {self.Player.Name} activated {self.ItemName}`)
 end
 
 function BaseItem:Destroy()

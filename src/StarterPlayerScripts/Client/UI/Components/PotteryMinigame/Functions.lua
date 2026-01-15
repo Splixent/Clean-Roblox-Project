@@ -177,7 +177,7 @@ Functions.WheelAngle = scope:Value(0)
 -- Stage system
 Functions.CurrentStage = scope:Value(1)
 Functions.StabilityProgress = scope:Value(0)
-Functions.TotalStages = 3
+Functions.TotalStages = scope:Value(3)  -- Reactive Value for dynamic level indicators
 
 -- Game state
 Functions.Progress = scope:Value(0)
@@ -206,12 +206,50 @@ Functions.PulseNegated = scope:Value(false)
 Functions.LastPushedDirection = scope:Value("none")  -- Tracks last pressed direction for UI flash
 Functions.CounterSuccess = scope:Value(false)  -- True when a successful counter happens
 Functions.CounterFlash = scope:Value(0)  -- 0-1 flash intensity for counter success visual
+Functions.HasPulses = scope:Value(true)  -- True when current stage has pulses enabled
+
+-- Status text priority system (higher priority = stays visible longer)
+Functions.StatusText = scope:Value("")  -- Current status text
+Functions.StatusPriority = scope:Value(0)  -- Current status priority (0 = lowest)
+Functions.StatusExpireTime = scope:Value(0)  -- When current status expires
+
+-- Success/completion state
+Functions.ShowSuccess = scope:Value(false)  -- True when showing success screen
+Functions.IsExiting = scope:Value(false)  -- True when animating out
+
+-- Countdown state
+Functions.ShowCountdown = scope:Value(false)  -- True when showing countdown
+Functions.CountdownNumber = scope:Value(3)  -- Current countdown number (3, 2, 1)
 
 -- Animation springs
 Functions.AnimatedPulseProgress = scope:Spring(Functions.PulseProgress, 8, 0.8)
 Functions.AnimatedPulseFlash = scope:Spring(Functions.PulseFlash, 30, 0.4)
 Functions.AnimatedCounterFlash = scope:Spring(Functions.CounterWindowFlash, 25, 0.5)
 Functions.AnimatedCounterSuccess = scope:Spring(Functions.CounterFlash, 20, 0.5)
+
+-- Helper function to set status text with priority
+function Functions:SetStatus(text, priority, duration)
+    priority = priority or 1
+    duration = duration or 0.5
+    local currentPriority = peek(self.StatusPriority)
+    local currentExpire = peek(self.StatusExpireTime)
+    
+    -- Only override if higher/equal priority OR current status expired
+    if priority >= currentPriority or tick() > currentExpire then
+        self.StatusText:set(text)
+        self.StatusPriority:set(priority)
+        self.StatusExpireTime:set(tick() + duration)
+        
+        -- Schedule clear after duration
+        task.delay(duration, function()
+            if peek(self.StatusText) == text and peek(self.StatusExpireTime) <= tick() then
+                self.StatusText:set("")
+                self.StatusPriority:set(0)
+            end
+        end)
+    end
+end
+
 Functions.AnimatedVisibility = scope:Spring(
     scope:Computed(function(use)
         return use(Functions.IsOpen) and 1 or 0
@@ -324,6 +362,13 @@ function Functions:GetStageConfig(stageNum)
     end
     
     -- Return with defaults for any missing fields
+    local pulses = config.pulses
+    -- If pulses is explicitly set to empty array, keep it empty (no pulses mode)
+    -- Only provide default if pulses is nil/not defined
+    if pulses == nil then
+        pulses = {{ interval = 2.0, strength = 0.7 }}
+    end
+    
     return {
         stabilityRequired = config.stabilityRequired or 3.0,
         driftStrength = config.driftStrength or 0.5,
@@ -334,7 +379,7 @@ function Functions:GetStageConfig(stageNum)
         wheelSpeed = config.wheelSpeed or 2.0,
         counterWindowStart = config.counterWindowStart or 0.25,
         counterWindowEnd = config.counterWindowEnd or 0.12,
-        pulses = config.pulses or {{ interval = 2.0, strength = 0.7 }},
+        pulses = pulses,
     }
 end
 
@@ -351,6 +396,17 @@ function Functions:PrepareNextPulse()
     local stage = peek(self.CurrentStage)
     local config = self:GetStageConfig(stage)
     
+    -- Check if this stage has pulses
+    local hasPulses = config.pulses and #config.pulses > 0
+    self.HasPulses:set(hasPulses)
+    
+    -- Skip pulse setup if no pulses
+    if not hasPulses then
+        self.PulseProgress:set(0)
+        self.InCounterWindow:set(false)
+        return
+    end
+    
     -- Set the forecasted drift direction
     local dir = self.CardinalDirections[math.random(1, 4)]
     self.NextDriftX:set(dir.x)
@@ -359,7 +415,7 @@ function Functions:PrepareNextPulse()
     
     -- Change pulse pattern every 2-3 pulses for variety
     self._pulsesUntilChange = self._pulsesUntilChange - 1
-    if self._pulsesUntilChange <= 0 then
+    if self._pulsesUntilChange <= 0 and #config.pulses > 0 then
         self._currentPulseIndex = math.random(1, #config.pulses)
         self._pulsesUntilChange = math.random(2, 3)
         local pulse = config.pulses[self._currentPulseIndex]
@@ -430,20 +486,16 @@ function Functions:EvaluateCounterPush(driftX, driftY)
         self.LastPushResult:set("perfect")
         local combo = peek(self.PerfectCounter) + 1
         self.PerfectCounter:set(combo)
-        task.delay(0.8, function()
-            self.LastPushResult:set("")
-        end)
+        self:SetStatus("Perfect!", 10, 1.2)  -- High priority, long duration
         return true
     elseif dot < 0 then
         self.LastPushResult:set("good")
+        self:SetStatus("Good!", 7, 0.8)  -- Medium priority
     else
         self.LastPushResult:set("miss")
         self.PerfectCounter:set(0)
+        self:SetStatus("Miss!", 5, 0.6)  -- Lower priority
     end
-    
-    task.delay(0.8, function()
-        self.LastPushResult:set("")
-    end)
     
     return false
 end
@@ -467,7 +519,7 @@ function Functions:Open(config, onCompleteCallback, legacyDifficulty)
     -- Apply stages config or use defaults
     if config.stages and #config.stages > 0 then
         self.Stages = config.stages
-        self.TotalStages = #config.stages
+        self.TotalStages:set(#config.stages)
     else
         -- Deep copy defaults
         self.Stages = {}
@@ -484,7 +536,7 @@ function Functions:Open(config, onCompleteCallback, legacyDifficulty)
                 end
             end
         end
-        self.TotalStages = 3
+        self.TotalStages:set(3)
     end
     
     self.IsOpen:set(true)
@@ -513,10 +565,37 @@ function Functions:Open(config, onCompleteCallback, legacyDifficulty)
     self.PerfectCounter:set(0)
     self._pulseTimer = 0
     
+    -- Reset status text system
+    self.StatusText:set("")
+    self.StatusPriority:set(0)
+    self.StatusExpireTime:set(0)
+    
+    -- Reset success/exit state
+    self.ShowSuccess:set(false)
+    self.IsExiting:set(false)
+    
+    -- Reset countdown state
+    self.ShowCountdown:set(false)
+    self.CountdownNumber:set(3)
+    
+    -- Reset counter flash
+    self.CounterSuccess:set(false)
+    self.CounterFlash:set(0)
+    self.LastPushedDirection:set("none")
+    
     local stageConfig = self:GetStageConfig(1)
-    self._currentPulseIndex = math.random(1, #stageConfig.pulses)
-    self._pulsesUntilChange = math.random(2, 3)
-    self.PulseInterval:set(stageConfig.pulses[self._currentPulseIndex].interval)
+    local hasPulses = stageConfig.pulses and #stageConfig.pulses > 0
+    self.HasPulses:set(hasPulses)
+    
+    if hasPulses then
+        self._currentPulseIndex = math.random(1, #stageConfig.pulses)
+        self._pulsesUntilChange = math.random(2, 3)
+        self.PulseInterval:set(stageConfig.pulses[self._currentPulseIndex].interval)
+    else
+        self._currentPulseIndex = 1
+        self._pulsesUntilChange = 0
+        self.PulseInterval:set(999)  -- Large interval so pulse never triggers
+    end
     self.BeatCount:set(3)
     self.CounterWindowFlash:set(0)
     self.PulseNegated:set(false)
@@ -526,7 +605,36 @@ function Functions:Open(config, onCompleteCallback, legacyDifficulty)
     self:PrepareNextPulse()
     
     self:DisableCharacterControls()
-    self:StartGameLoop()
+    
+    -- Show countdown before starting
+    self:StartCountdown(function()
+        self:StartGameLoop()
+    end)
+end
+
+function Functions:StartCountdown(onComplete)
+    self.GameState:set("countdown")
+    self.ShowCountdown:set(true)
+    self.CountdownNumber:set(3)
+    
+    -- 3, 2, 1 countdown (0.33s each = 1s total)
+    local countdownDelay = 0.33
+    
+    task.delay(countdownDelay, function()
+        self.CountdownNumber:set(2)
+        
+        task.delay(countdownDelay, function()
+            self.CountdownNumber:set(1)
+            
+            task.delay(countdownDelay, function()
+                self.ShowCountdown:set(false)
+                self.GameState:set("playing")
+                if onComplete then
+                    onComplete()
+                end
+            end)
+        end)
+    end)
 end
 
 function Functions:Close()
@@ -536,10 +644,17 @@ function Functions:Close()
 end
 
 function Functions:Exit()
-    self:Close()
-    if self.OnExit then
-        task.defer(self.OnExit)
-    end
+    -- Trigger exit animation
+    self.IsExiting:set(true)
+    
+    task.delay(0.1, function()  -- Wait for drop animation
+        self.IsExiting:set(false)
+        self.ShowSuccess:set(false)
+        self:Close()
+        if self.OnExit then
+            task.defer(self.OnExit)
+        end
+    end)
 end
 
 function Functions:DisableCharacterControls()
@@ -601,8 +716,14 @@ function Functions:StartGameLoop()
         
         -- Check if we're in the counter window
         local timeUntilPulse = pulseInterval - self._pulseTimer
+        local wasInWindow = peek(self.InCounterWindow)
         local inWindow = timeUntilPulse <= config.counterWindowStart and timeUntilPulse > -config.counterWindowEnd
         self.InCounterWindow:set(inWindow)
+        
+        -- Reset counter used flag when entering a new window
+        if inWindow and not wasInWindow then
+            self._counterUsedThisWindow = false
+        end
         
         -- Flash during counter window
         self.CounterWindowFlash:set(inWindow and 1 or 0)
@@ -649,6 +770,15 @@ function Functions:StartGameLoop()
         local isCentered = distance <= config.threshold
         self.IsCentered:set(isCentered)
         
+        -- Update status text for centered/off-center (low priority, doesn't override counters)
+        if peek(self.StatusPriority) <= 2 then
+            if isCentered then
+                self:SetStatus("Centered!", 2, 0.3)
+            else
+                self:SetStatus("Off-center...", 1, 0.3)
+            end
+        end
+        
         -- Shake when very off-center
         local shakeAmount = math.clamp((distance - 0.5) / 0.5, 0, 1)
         self.ShakeIntensity:set(shakeAmount * 0.5)
@@ -670,7 +800,8 @@ function Functions:StartGameLoop()
         
         -- Update overall progress
         local stageProgress = stability / config.stabilityRequired
-        local overallProgress = ((stage - 1) + stageProgress) / self.TotalStages
+        local totalStages = peek(self.TotalStages)
+        local overallProgress = ((stage - 1) + stageProgress) / totalStages
         self.Progress:set(overallProgress)
     end)
 end
@@ -684,18 +815,32 @@ end
 
 function Functions:CompleteStage()
     local currentStage = peek(self.CurrentStage)
+    local totalStages = peek(self.TotalStages)
     
-    if currentStage >= self.TotalStages then
+    if currentStage >= totalStages then
         -- Game complete!
         self.GameState:set("complete")
         self.Progress:set(1)
         self:StopGameLoop()
         
-        if self.OnComplete then
-            task.delay(0.5, function()
-                self.OnComplete()
+        -- Show success screen
+        self.ShowSuccess:set(true)
+        
+        -- After showing success, animate out and call complete
+        task.delay(1.5, function()
+            self.IsExiting:set(true)  -- Trigger exit animation
+            
+            task.delay(0.5, function()  -- Wait for animation
+                self.IsExiting:set(false)
+                self.ShowSuccess:set(false)
+                self.IsOpen:set(false)
+                self:EnableCharacterControls()
+                
+                if self.OnComplete then
+                    self.OnComplete()
+                end
             end)
-        end
+        end)
         return
     end
     
@@ -704,11 +849,10 @@ function Functions:CompleteStage()
     self.GameState:set("stageTransition")
     self.StageText:set("STAGE " .. nextStage .. "!")
     
-    task.delay(1.2, function()
+    task.delay(0.8, function()
+        self.StageText:set("")
         self.CurrentStage:set(nextStage)
         self.StabilityProgress:set(0)
-        self.StageText:set("")
-        self.GameState:set("playing")
         
         -- Reset for new stage
         self.ClayOffsetX:set(peek(self.ClayOffsetX) * 0.5)
@@ -719,10 +863,24 @@ function Functions:CompleteStage()
         
         -- Reset pulse system for new stage config
         local config = self:GetStageConfig(nextStage)
-        self._currentPulseIndex = math.random(1, #config.pulses)
-        self._pulsesUntilChange = math.random(2, 3)
-        self.PulseInterval:set(config.pulses[self._currentPulseIndex].interval)
+        local hasPulses = config.pulses and #config.pulses > 0
+        self.HasPulses:set(hasPulses)
+        
+        if hasPulses then
+            self._currentPulseIndex = math.random(1, #config.pulses)
+            self._pulsesUntilChange = math.random(2, 3)
+            self.PulseInterval:set(config.pulses[self._currentPulseIndex].interval)
+        else
+            self._currentPulseIndex = 1
+            self._pulsesUntilChange = 0
+            self.PulseInterval:set(999)  -- Large interval so pulse never triggers
+        end
         self:PrepareNextPulse()
+        
+        -- Show countdown before next stage
+        self:StartCountdown(function()
+            self:StartGameLoop()
+        end)
     end)
 end
 
@@ -740,7 +898,7 @@ function Functions:OnPush(direction)
     end)
     
     -- Track if this push is during the counter window
-    if peek(self.InCounterWindow) then
+    if peek(self.InCounterWindow) and not self._counterUsedThisWindow then
         self._playerPushedDuringWindow = true
         self._playerPushDirection = direction
         
@@ -753,20 +911,17 @@ function Functions:OnPush(direction)
             (driftDir == "right" and direction == "left")
         
         if isCorrectCounter then
+            self._counterUsedThisWindow = true  -- Prevent multiple counters per window
             self.CounterSuccess:set(true)
             self.CounterFlash:set(1)  -- Trigger flash animation
-            self.LastPushResult:set("perfect")  -- Show "Perfect!" in status
+            self.LastPushResult:set("perfect")
+            self:SetStatus("Perfect!", 10, 1.2)  -- High priority, visible for 1.2s
             
             task.delay(0.4, function()
                 self.CounterSuccess:set(false)
             end)
             task.delay(0.1, function()
                 self.CounterFlash:set(0)  -- Reset flash for spring to animate back
-            end)
-            task.delay(0.8, function()
-                if peek(self.LastPushResult) == "perfect" then
-                    self.LastPushResult:set("")
-                end
             end)
         end
     end

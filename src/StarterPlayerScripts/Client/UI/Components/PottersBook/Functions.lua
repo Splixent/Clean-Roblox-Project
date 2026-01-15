@@ -138,6 +138,14 @@ function Functions:GetStylesForSection(sectionName: string)
     return styles
 end
 
+function Functions:ColorizePotteryStyle(object, clayType)
+	for _, basePart in ipairs(object:GetDescendants()) do
+		if basePart:IsA("BasePart") and basePart.Material == Enum.Material.Mud then
+			basePart.Color = SharedConstants.clayTypes[clayType].color
+		end
+	end
+end
+
 -- Get selected style data
 function Functions:GetSelectedStyleData()
     local styleKey = peek(self.SelectedStyle)
@@ -193,7 +201,7 @@ function Functions:SetupViewportFrame(viewportFrame: ViewportFrame, modelName: s
     
     -- Get the model name from pottery data (e.g., "Bowl" instead of "bowl")
     local styleData = SharedConstants.pottteryData and SharedConstants.pottteryData[modelName]
-    local actualModelName = styleData and styleData.model or modelName
+    local actualModelName = styleData and styleData.name or modelName
     
     local assetsFolder = ReplicatedStorage:FindFirstChild("Assets")
     if not assetsFolder then 
@@ -207,7 +215,7 @@ function Functions:SetupViewportFrame(viewportFrame: ViewportFrame, modelName: s
         return 
     end
     
-    local modelTemplate = potteryStyles:FindFirstChild(actualModelName)
+    local modelTemplate = potteryStyles[actualModelName].Model
     if not modelTemplate then 
         self:CreatePlaceholderModel(viewportFrame, modelName)
         return 
@@ -215,6 +223,8 @@ function Functions:SetupViewportFrame(viewportFrame: ViewportFrame, modelName: s
     
     local model = modelTemplate:Clone()
     model.Parent = viewportFrame
+
+    Functions:ColorizePotteryStyle(model, styleData.clayType)
     
     local camera = Instance.new("Camera")
     camera.Parent = viewportFrame

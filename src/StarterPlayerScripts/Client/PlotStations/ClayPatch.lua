@@ -87,7 +87,6 @@ function ClayPatch:SetupVisuals()
 end
 
 function ClayPatch:OnUpgradeTriggered(player: Player)
-    print(player.Name .. " wants to upgrade the clay patch")
 end
 
 function ClayPatch:OnTriggered(player: Player)
@@ -97,7 +96,6 @@ function ClayPatch:OnTriggered(player: Player)
             self.harvest = nil
 			self.harvest = Harvest:SetupHarvest(self.model.PrimaryPart.Position, function()
 				HarvestClay:Call():After(function(success, result)
-                    print("Harvest result: " .. tostring(result))
 				end)
 				self.harvest:Cancel()
 				self.harvest = nil
@@ -110,7 +108,6 @@ function ClayPatch:OnTriggered(player: Player)
     else
 		self.harvest = Harvest:SetupHarvest(self.model.PrimaryPart.Position, function()
 			HarvestClay:Call():After(function(success, result)
-				print("Harvest result: " .. tostring(result))
 			end)
 			self.harvest:Cancel()
             self.harvest = nil

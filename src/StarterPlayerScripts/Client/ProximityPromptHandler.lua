@@ -1180,4 +1180,24 @@ function ProximityPromptManager:GetCustomHorizontalOffset(): number
 	return self._customHorizontalOffset
 end
 
+--[=[
+	Sets whether this simple prompt should be on the left or right side
+	@param left boolean -- True for left side, false for right side (centered if no other prompts)
+]=]
+function ProximityPromptManager:SetLeft(left: boolean)
+	if not self._simple then return end -- Only applies to simple prompts
+	
+	self._left = left
+	
+	-- Immediately update the position if visible
+	if self._isVisible then
+		local horizontalDir = self._left and -1 or 1
+		local totalHorizontalOffset = SIMPLE_HORIZONTAL_OFFSET + SimpleHorizontalOffsetAdjustment + self._customHorizontalOffset
+		self._stackHorizontalOffset:set(totalHorizontalOffset * horizontalDir)
+		
+		-- Re-update stacking for all prompts on this parent
+		updateStackForParent(self._parent)
+	end
+end
+
 return ProximityPromptManager

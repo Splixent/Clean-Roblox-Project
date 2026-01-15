@@ -128,8 +128,23 @@ local function Component()
         return math.pi / 2
     end)
     
+    -- Counter direction arrow angle (OPPOSITE of wobble - this is what player should press)
+    local counterArrowAngle = s:Computed(function(use)
+        local dir = use(Functions.NextDriftDirection)
+        -- Return the OPPOSITE direction
+        if dir == "up" then return math.pi  -- Press down
+        elseif dir == "right" then return -math.pi / 2  -- Press left
+        elseif dir == "down" then return 0  -- Press up
+        elseif dir == "left" then return math.pi / 2  -- Press right
+        end
+        return -math.pi / 2
+    end)
+    
     -- Spring the wobble arrow angle for smooth radial rotation
     local springWobbleArrowAngle = s:Spring(wobbleArrowAngle, 15, 0.7)
+    
+    -- Spring the counter arrow angle for smooth radial rotation
+    local springCounterArrowAngle = s:Spring(counterArrowAngle, 15, 0.7)
     
     -- Arrow angle based on current drift offset (shows where clay is drifting to)
     local arrowAngle = s:Computed(function(use)
@@ -169,87 +184,72 @@ local function Component()
     local innerClayModel = MinigameClayTemplate:Clone()
     innerClayModel:PivotTo(CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(90), 0, 0))
     
-    -- Create level indicators
-    local function createLevelIndicators()
-        local indicators = {}
-        for i = 1, 3 do
-            table.insert(indicators, s:New "Frame" {
-                Name = "Stage" .. i,
-                BackgroundColor3 = s:Computed(function(use)
-                    local stage = use(Functions.CurrentStage)
-                    if i < stage then
-                        -- Completed stage - bright green
-                        return Color3.fromRGB(0, 200, 100)
-                    elseif i == stage then
-                        -- Current stage - pulsing/active color
-                        return Color3.fromRGB(255, 200, 50)
-                    else
-                        -- Future stage - grey
-                        return Color3.fromRGB(200, 200, 200)
-                    end
-                end),
-                BackgroundTransparency = s:Computed(function(use)
-                    local stage = use(Functions.CurrentStage)
-                    return i == stage and 0 or 0.3
-                end),
-                Size = UDim2.fromScale(0.22, 0.8),
-                LayoutOrder = i,
-                [Children] = {
-                    s:New "UICorner" { CornerRadius = UDim.new(0.3, 0) },
-                    s:New "UIStroke" {
-                        Color = s:Computed(function(use)
-                            local stage = use(Functions.CurrentStage)
-                            if i < stage then
-                                return Color3.fromRGB(0, 150, 70)
-                            elseif i == stage then
-                                return Color3.fromRGB(200, 150, 30)
-                            else
-                                return Color3.fromRGB(150, 150, 150)
-                            end
-                        end),
-                        Thickness = 1.5,
-                    },
-                    s:New "TextLabel" {
-                        Name = "StageNumber",
-                        AnchorPoint = Vector2.new(0.5, 0.5),
-                        BackgroundTransparency = 1,
-                        Position = UDim2.fromScale(0.5, 0.5),
-                        Size = UDim2.fromScale(0.8, 0.8),
-                        Text = tostring(i),
-                        TextColor3 = s:Computed(function(use)
-                            local stage = use(Functions.CurrentStage)
-                            if i < stage then
-                                return Color3.fromRGB(255, 255, 255)
-                            elseif i == stage then
-                                return Color3.fromRGB(80, 50, 0)
-                            else
-                                return Color3.fromRGB(120, 120, 120)
-                            end
-                        end),
-                        FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold),
-                        TextScaled = true,
-                    },
-                    -- Checkmark for completed stages
-                    s:New "TextLabel" {
-                        Name = "Checkmark",
-                        AnchorPoint = Vector2.new(0.5, 0.5),
-                        BackgroundTransparency = 1,
-                        Position = UDim2.fromScale(0.5, 0.5),
-                        Size = UDim2.fromScale(0.7, 0.7),
-                        Text = "✓",
-                        TextColor3 = Color3.new(1, 1, 1),
-                        FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold),
-                        TextScaled = true,
-                        Visible = s:Computed(function(use)
-                            local stage = use(Functions.CurrentStage)
-                            return i < stage
-                        end),
-                    },
-                }
-            })
+    -- Create level indicators (simple colored circles)
+    -- Colors for up to 10 levels (distinct hues)
+    local stageColors = {
+        [1] = {active = Color3.fromRGB(255, 100, 100), completed = Color3.fromRGB(200, 70, 70)},   -- Red
+        [2] = {active = Color3.fromRGB(255, 170, 50), completed = Color3.fromRGB(200, 130, 30)},   -- Orange
+        [3] = {active = Color3.fromRGB(255, 220, 50), completed = Color3.fromRGB(200, 170, 30)},   -- Yellow
+        [4] = {active = Color3.fromRGB(150, 255, 80), completed = Color3.fromRGB(100, 200, 50)},   -- Lime
+        [5] = {active = Color3.fromRGB(50, 230, 130), completed = Color3.fromRGB(30, 180, 100)},   -- Green
+        [6] = {active = Color3.fromRGB(50, 220, 220), completed = Color3.fromRGB(30, 170, 170)},   -- Cyan
+        [7] = {active = Color3.fromRGB(80, 180, 255), completed = Color3.fromRGB(50, 140, 200)},   -- Sky Blue
+        [8] = {active = Color3.fromRGB(130, 130, 255), completed = Color3.fromRGB(100, 100, 200)}, -- Blue
+        [9] = {active = Color3.fromRGB(200, 130, 255), completed = Color3.fromRGB(160, 100, 200)}, -- Purple
+        [10] = {active = Color3.fromRGB(255, 130, 200), completed = Color3.fromRGB(200, 100, 160)}, -- Pink
+    }
+    
+    -- Create a computed array of stage indices that updates when TotalStages changes
+    local stageIndices = s:Computed(function(use)
+        local total = use(Functions.TotalStages)
+        local indices = {}
+        for i = 1, total do
+            table.insert(indices, i)
         end
-        return indicators
-    end
+        return indices
+    end)
+    
+    -- Use ForValues to dynamically create level indicators
+    local levelIndicators = s:ForValues(stageIndices, function(use, scope, i)
+        local colorSet = stageColors[i] or stageColors[1] -- Fallback to red if more than 10 stages
+        
+        return scope:New "Frame" {
+            Name = "Stage" .. i,
+            BackgroundColor3 = scope:Computed(function(use)
+                local stage = use(Functions.CurrentStage)
+                if i < stage then
+                    return colorSet.completed  -- Completed - darkened version
+                elseif i == stage then
+                    return colorSet.active  -- Current - bright version
+                else
+                    return Color3.fromRGB(200, 200, 200)  -- Future - grey
+                end
+            end),
+            BackgroundTransparency = scope:Computed(function(use)
+                local stage = use(Functions.CurrentStage)
+                return i == stage and 0 or 0.3
+            end),
+            Size = UDim2.fromScale(0.15, 0.8),
+            LayoutOrder = i,
+            [Children] = {
+                scope:New "UICorner" { CornerRadius = UDim.new(0.5, 0) },
+                scope:New "UIAspectRatioConstraint" { AspectRatio = 1 },
+                scope:New "UIStroke" {
+                    Color = scope:Computed(function(use)
+                        local stage = use(Functions.CurrentStage)
+                        if i < stage then
+                            return Color3.fromRGB(colorSet.completed.R * 0.7 * 255, colorSet.completed.G * 0.7 * 255, colorSet.completed.B * 0.7 * 255)
+                        elseif i == stage then
+                            return Color3.fromRGB(colorSet.active.R * 0.8 * 255, colorSet.active.G * 0.8 * 255, colorSet.active.B * 0.8 * 255)
+                        else
+                            return Color3.fromRGB(150, 150, 150)
+                        end
+                    end),
+                    Thickness = 1.5,
+                },
+            }
+        }
+    end)
     
     return s:New "ScreenGui" {
         Name = "PotteryMinigame",
@@ -262,42 +262,63 @@ local function Component()
         end),
         
         [Children] = {
+            -- Main container Frame that holds everything and handles position animation
             s:New "Frame" {
-                Name = "Container",
+                Name = "RootContainer",
                 AnchorPoint = Vector2.new(0.5, 0.5),
                 BackgroundTransparency = 1,
-                Position = UDim2.fromScale(0.5, 0.5),
+                Position = s:Spring(
+                    s:Computed(function(use)
+                        local isOpen = use(Functions.IsOpen)
+                        local isExiting = use(Functions.IsExiting)
+                        -- Drop down when exiting, slide up when opening
+                        if isExiting then
+                            return UDim2.fromScale(0.5, 1.5)
+                        end
+                        return isOpen and UDim2.fromScale(0.5, 0.5) or UDim2.fromScale(0.5, 1.5)
+                    end), 15, 0.7),
                 Size = UDim2.fromScale(1, 1),
                 
                 [Children] = {
-                    s:New "Frame" {
-                        Name = "Container",
+                    -- CanvasGroup for dimming the game UI
+                    s:New "CanvasGroup" {
+                        Name = "GameCanvasGroup",
                         AnchorPoint = Vector2.new(0.5, 0.5),
                         BackgroundTransparency = 1,
-                        Position = s:Spring(
-                            s:Computed(function(use)
-                                local isOpen = use(Functions.IsOpen)
-                                return isOpen and UDim2.fromScale(0.5, 0.5) or UDim2.fromScale(0.5, 1.5)
-                            end),
-                            12, 0.6
-                        ),
-                        Size = UDim2.fromScale(0.353312, 0.683929),
-                        ZIndex = 0,
+                        GroupColor3 = s:Spring(s:Computed(function(use)
+                            local showCountdown = use(Functions.ShowCountdown)
+                            local showSuccess = use(Functions.ShowSuccess)
+                            if showCountdown or showSuccess then
+                                return Color3.fromRGB(80, 80, 80)  -- Dimmed
+                            end
+                            return Color3.new(1, 1, 1)  -- Normal
+                        end), 12, 0.7),
+                        Position = UDim2.fromScale(0.5, 0.5),
+                        Size = UDim2.fromScale(1, 1),
                         
                         [Children] = {
-                            -- Background
-                            s:New "ImageLabel" {
-                                Name = "Background",
+                            s:New "Frame" {
+                                Name = "MainContainer",
                                 AnchorPoint = Vector2.new(0.5, 0.5),
                                 BackgroundTransparency = 1,
-                                Image = "rbxassetid://123413392379402",
-                                Position = UDim2.fromScale(0.5, 0.53799),
-                                ScaleType = Enum.ScaleType.Slice,
-                                Size = UDim2.fromScale(1, 1.07598),
-                                SliceCenter = Rect.new(512, 512, 512, 512),
-                                SliceScale = 0.3,
-                                ZIndex = -1,
-                            },
+                                Position = UDim2.fromScale(0.5, 0.5),
+                                Size = UDim2.fromScale(0.353312, 0.683929),
+                                ZIndex = 0,
+                        
+                                [Children] = {
+                                    -- Background
+                                    s:New "ImageLabel" {
+                                        Name = "Background",
+                                        AnchorPoint = Vector2.new(0.5, 0.5),
+                                        BackgroundTransparency = 1,
+                                        Image = "rbxassetid://123413392379402",
+                                        Position = UDim2.fromScale(0.5, 0.53799),
+                                        ScaleType = Enum.ScaleType.Slice,
+                                        Size = UDim2.fromScale(1, 1.07598),
+                                        SliceCenter = Rect.new(512, 512, 512, 512),
+                                        SliceScale = 0.3,
+                                        ZIndex = -1,
+                                    },
                             
                             -- Secondary Background
                             s:New "ImageLabel" {
@@ -439,6 +460,80 @@ local function Component()
                                 [Children] = { s:New "UICorner" { CornerRadius = UDim.new(0.5, 0) } }
                             },
                             
+                            -- Counter Feedback Ring (red glow behind wheel for impact feedback)
+                            s:New "Frame" {
+                                Name = "CounterFeedbackRing",
+                                AnchorPoint = Vector2.new(0.5, 0.5),
+                                BackgroundColor3 = s:Computed(function(use)
+                                    local counterFlash = use(Functions.AnimatedCounterSuccess)
+                                    local pulseProgress = use(Functions.PulseProgress)
+                                    
+                                    -- Flash bright green on successful counter
+                                    if counterFlash > 0.1 then
+                                        return Color3.fromRGB(50, 255, 100):Lerp(Color3.fromRGB(255, 255, 255), counterFlash * 0.5)
+                                    end
+                                    
+                                    -- Pulse red color intensity based on pulse progress (urgency)
+                                    local baseRed = Color3.fromRGB(255, 80, 80)
+                                    local urgentRed = Color3.fromRGB(255, 30, 30)
+                                    return baseRed:Lerp(urgentRed, pulseProgress)
+                                end),
+                                BackgroundTransparency = s:Spring(s:Computed(function(use)
+                                    local counterFlash = use(Functions.AnimatedCounterSuccess)
+                                    local pulseProgress = use(Functions.PulseProgress)
+                                    local inWindow = use(Functions.InCounterWindow)
+                                    
+                                    -- Very visible on counter success
+                                    if counterFlash > 0.1 then
+                                        return 0.3 - counterFlash * 0.3  -- Goes to 0 (fully visible) on success
+                                    end
+                                    
+                                    -- More visible during counter window and as pulse approaches
+                                    if inWindow then
+                                        return 0.5
+                                    end
+                                    
+                                    -- Fade in as pulse approaches, fully invisible when not urgent
+                                    return 1 - (pulseProgress * 0.4)  -- Goes from 1 to 0.6 as progress increases
+                                end), 15, 0.6),
+                                Position = UDim2.fromScale(0.502666, 0.450581),
+                                Size = s:Spring(s:Computed(function(use)
+                                    local counterFlash = use(Functions.AnimatedCounterSuccess)
+                                    local baseSize = 0.58
+                                    
+                                    -- Expand on successful counter
+                                    local scale = 1 + counterFlash * 0.25
+                                    local size = baseSize * scale
+                                    
+                                    return UDim2.fromScale(size, size * 0.919)
+                                end), 20, 0.5),
+                                ZIndex = 1,  -- Behind wheel base (ZIndex 2) but above pulse ring bg (ZIndex 0)
+                                [Children] = { 
+                                    s:New "UICorner" { CornerRadius = UDim.new(0.5, 0) },
+                                    s:New "UIStroke" {
+                                        Color = s:Computed(function(use)
+                                            local counterFlash = use(Functions.AnimatedCounterSuccess)
+                                            if counterFlash > 0.1 then
+                                                return Color3.fromRGB(100, 255, 150)
+                                            end
+                                            return Color3.fromRGB(255, 50, 50)
+                                        end),
+                                        Thickness = s:Computed(function(use)
+                                            local counterFlash = use(Functions.AnimatedCounterSuccess)
+                                            local pulseProgress = use(Functions.PulseProgress)
+                                            -- Base thickness grows with pulse progress, extra on counter
+                                            return 2 + pulseProgress * 3 + counterFlash * 6
+                                        end),
+                                        Transparency = s:Computed(function(use)
+                                            local counterFlash = use(Functions.AnimatedCounterSuccess)
+                                            local pulseProgress = use(Functions.PulseProgress)
+                                            if counterFlash > 0.1 then return 0 end
+                                            return 0.7 - pulseProgress * 0.5
+                                        end),
+                                    }
+                                }
+                            },
+                            
                             -- Outer Clay ViewportFrame (outline layer)
                             s:New "ViewportFrame" {
                                 Name = "ClayOutline",
@@ -523,17 +618,18 @@ local function Component()
                                 [Children] = { s:New "UIAspectRatioConstraint" {} }
                             },
                             
-                            -- Wobble Direction Arrow (shows where next wobble will push)
+                            -- Wobble Direction Arrow (shows where next wobble will push - warning indicator)
                             s:New "ImageLabel" {
                                 Name = "WobbleArrow",
                                 AnchorPoint = Vector2.new(0.5, 0.5),
                                 BackgroundTransparency = 1,
                                 Image = "rbxassetid://104879640275901",
                                 ImageColor3 = wobbleArrowColor,
+                                ImageTransparency = 0.4,  -- More transparent since it's just a warning
                                 Position = s:Computed(function(use)
                                     local angle = use(springWobbleArrowAngle)
                                     local centerX, centerY = 0.502666, 0.450581
-                                    local radius = 0.25  -- Positioned at outer edge of wheel
+                                    local radius = 0.28  -- Positioned at outer edge of wheel
                                     -- Calculate position using angle (0 = up, clockwise)
                                     local x = centerX + math.sin(angle) * radius
                                     local y = centerY - math.cos(angle) * radius * 0.919  -- Account for aspect ratio
@@ -543,9 +639,79 @@ local function Component()
                                     return math.deg(use(springWobbleArrowAngle))
                                 end),
                                 ScaleType = Enum.ScaleType.Fit,
-                                Size = UDim2.fromScale(0.106139, 0.0975664),
-                                ZIndex = 8,
+                                Size = UDim2.fromScale(0.07, 0.065),  -- Smaller size
+                                Visible = s:Computed(function(use)
+                                    return use(Functions.HasPulses)
+                                end),
+                                ZIndex = 7,
                                 [Children] = { s:New "UIAspectRatioConstraint" {} }
+                            },
+                            
+                            -- Counter Direction Arrow (shows which way player should press - main indicator)
+                            s:New "ImageLabel" {
+                                Name = "CounterArrow",
+                                AnchorPoint = Vector2.new(0.5, 0.5),
+                                BackgroundTransparency = 1,
+                                Image = "rbxassetid://104879640275901",
+                                ImageColor3 = s:Computed(function(use)
+                                    local progress = use(Functions.PulseProgress)
+                                    local inWindow = use(Functions.InCounterWindow)
+                                    local counterSuccess = use(Functions.CounterSuccess)
+                                    
+                                    -- Bright green on successful counter
+                                    if counterSuccess then
+                                        return Color3.fromRGB(100, 255, 150)
+                                    end
+                                    
+                                    -- Bright green in counter window
+                                    if inWindow then
+                                        return Color3.fromRGB(50, 255, 100)
+                                    end
+                                    
+                                    -- Cyan/blue color that intensifies as wobble approaches
+                                    local base = Color3.fromRGB(100, 200, 255)
+                                    local bright = Color3.fromRGB(50, 255, 200)
+                                    return base:Lerp(bright, progress)
+                                end),
+                                Position = s:Computed(function(use)
+                                    local angle = use(springCounterArrowAngle)
+                                    local centerX, centerY = 0.502666, 0.450581
+                                    local radius = 0.25  -- Positioned at outer edge of wheel
+                                    -- Calculate position using angle (0 = up, clockwise)
+                                    local x = centerX + math.sin(angle) * radius
+                                    local y = centerY - math.cos(angle) * radius * 0.919  -- Account for aspect ratio
+                                    return UDim2.fromScale(x, y)
+                                end),
+                                Rotation = s:Computed(function(use)
+                                    return math.deg(use(springCounterArrowAngle))
+                                end),
+                                ScaleType = Enum.ScaleType.Fit,
+                                Size = s:Spring(s:Computed(function(use)
+                                    local progress = use(Functions.PulseProgress)
+                                    local inWindow = use(Functions.InCounterWindow)
+                                    local counterSuccess = use(Functions.CounterSuccess)
+                                    
+                                    -- Pulse bigger on success
+                                    if counterSuccess then
+                                        return UDim2.fromScale(0.14, 0.13)
+                                    end
+                                    
+                                    -- Bigger during counter window
+                                    if inWindow then
+                                        return UDim2.fromScale(0.13, 0.12)
+                                    end
+                                    
+                                    -- Grow as pulse approaches
+                                    local baseSize = 0.09 + progress * 0.03
+                                    return UDim2.fromScale(baseSize, baseSize * 0.92)
+                                end), 20, 0.6),
+                                Visible = s:Computed(function(use)
+                                    return use(Functions.HasPulses)
+                                end),
+                                ZIndex = 9,
+                                [Children] = { 
+                                    s:New "UIAspectRatioConstraint" {},
+                                }
                             },
                             
                             -- Wheel Base
@@ -591,12 +757,34 @@ local function Component()
                                         [Children] = {
                                             s:New "UIGradient" {
                                                 Transparency = s:Computed(function(use)
-                                                    local progress = math.clamp(use(Functions.AnimatedProgress), 0, 1)
+                                                    -- Calculate progress for current stage section only
+                                                    local stage = use(Functions.CurrentStage)
+                                                    local totalStages = use(Functions.TotalStages)
+                                                    local stability = use(Functions.AnimatedStability)
+                                                    
+                                                    -- Get the config for current stage
+                                                    local config = Functions:GetStageConfig(stage)
+                                                    local stageProgress = stability / config.stabilityRequired
+                                                    
+                                                    -- Calculate the section boundaries for this stage
+                                                    local sectionStart = (stage - 1) / totalStages
+                                                    local sectionEnd = stage / totalStages
+                                                    local sectionWidth = sectionEnd - sectionStart
+                                                    
+                                                    -- Fill from sectionStart to current position within section
+                                                    local fillEnd = sectionStart + (sectionWidth * math.clamp(stageProgress, 0, 1))
+                                                    
+                                                    -- Clamp fillEnd to ensure keypoints are always in proper order
+                                                    -- Must have: 0 < fillEnd < fillEnd+0.001 < 1
+                                                    fillEnd = math.clamp(fillEnd, 0.001, 0.997)
+                                                    
+                                                    -- Add completed stages (fully filled)
+                                                    -- The bar shows: completed stages as solid + current stage progress
                                                     return NumberSequence.new({
-                                                        NumberSequenceKeypoint.new(0, 0),
-                                                        NumberSequenceKeypoint.new(math.max(0.001, progress), 0),
-                                                        NumberSequenceKeypoint.new(math.max(0.002, progress + 0.001), 1),
-                                                        NumberSequenceKeypoint.new(1, 1),
+                                                        NumberSequenceKeypoint.new(0, 0),  -- Start filled
+                                                        NumberSequenceKeypoint.new(fillEnd, 0),  -- Filled to current progress
+                                                        NumberSequenceKeypoint.new(fillEnd + 0.002, 1),  -- Sharp cutoff
+                                                        NumberSequenceKeypoint.new(1, 1),  -- Rest unfilled
                                                     })
                                                 end),
                                             },
@@ -605,7 +793,7 @@ local function Component()
                                 }
                             },
                             
-                            -- Status Text
+                            -- Status Text (normal status, no countdown)
                             s:New "TextLabel" {
                                 Name = "Status",
                                 BackgroundTransparency = 1,
@@ -613,17 +801,19 @@ local function Component()
                                 Position = UDim2.fromScale(0.0870661, 0.0438557),
                                 Size = UDim2.fromScale(0.4, 0.0488877),
                                 Text = s:Computed(function(use)
-                                    local result = use(Functions.LastPushResult)
-                                    if result == "perfect" then return "Perfect!"
-                                    elseif result == "good" then return "Good!"
-                                    elseif result == "miss" then return "Miss!"
+                                    -- Use priority-based status text
+                                    local statusText = use(Functions.StatusText)
+                                    if statusText ~= "" then
+                                        return statusText
                                     end
+                                    -- Fallback to centered state
                                     return use(Functions.IsCentered) and "Centered!" or "Off-center..."
                                 end),
                                 TextColor3 = s:Computed(function(use)
-                                    local result = use(Functions.LastPushResult)
-                                    if result == "perfect" or result == "good" then return COLORS.statusCentered
-                                    elseif result == "miss" then return COLORS.pulseRingFill
+                                    local statusText = use(Functions.StatusText)
+                                    if statusText == "Perfect!" then return Color3.fromRGB(50, 255, 120)
+                                    elseif statusText == "Good!" then return COLORS.statusCentered
+                                    elseif statusText == "Miss!" then return Color3.fromRGB(255, 100, 100)
                                     end
                                     return use(Functions.IsCentered) and COLORS.statusCentered or COLORS.statusOffCenter
                                 end),
@@ -645,7 +835,7 @@ local function Component()
                                         SortOrder = Enum.SortOrder.LayoutOrder,
                                         VerticalAlignment = Enum.VerticalAlignment.Center,
                                     },
-                                    unpack(createLevelIndicators()),
+                                    levelIndicators,
                                 }
                             },
                             
@@ -681,7 +871,7 @@ local function Component()
                                     
                                     -- Direction buttons (Left)
                                     s:New "ImageButton" {
-                                        Active = false, AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1,
+                                        Active = true, AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1,
                                         Image = "rbxassetid://123413392379402", 
                                         ImageColor3 = s:Computed(function(use)
                                             local lastDir = use(Functions.LastPushedDirection)
@@ -689,6 +879,9 @@ local function Component()
                                         end),
                                         Position = UDim2.fromScale(0.199248, 0.488737), ScaleType = Enum.ScaleType.Fit, Selectable = false,
                                         Size = UDim2.fromScale(0.257732, 0.257732),
+                                        [OnEvent "Activated"] = function()
+                                            Functions:OnPush("left")
+                                        end,
                                         [Children] = {
                                             s:New "ImageLabel" { 
                                                 Name = "DirectionArrow", AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, 
@@ -709,7 +902,7 @@ local function Component()
                                     },
                                     -- Direction buttons (Right)
                                     s:New "ImageButton" {
-                                        Active = false, AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1,
+                                        Active = true, AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1,
                                         Image = "rbxassetid://123413392379402",
                                         ImageColor3 = s:Computed(function(use)
                                             local lastDir = use(Functions.LastPushedDirection)
@@ -717,6 +910,9 @@ local function Component()
                                         end),
                                         Position = UDim2.fromScale(0.800752, 0.488737), ScaleType = Enum.ScaleType.Fit, Selectable = false,
                                         Size = UDim2.fromScale(0.257732, 0.257732),
+                                        [OnEvent "Activated"] = function()
+                                            Functions:OnPush("right")
+                                        end,
                                         [Children] = {
                                             s:New "ImageLabel" { 
                                                 Name = "DirectionArrow", AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, 
@@ -737,7 +933,7 @@ local function Component()
                                     },
                                     -- Direction buttons (Down)
                                     s:New "ImageButton" {
-                                        Active = false, AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1,
+                                        Active = true, AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1,
                                         Image = "rbxassetid://123413392379402",
                                         ImageColor3 = s:Computed(function(use)
                                             local lastDir = use(Functions.LastPushedDirection)
@@ -745,6 +941,9 @@ local function Component()
                                         end),
                                         Position = UDim2.fromScale(0.5, 0.789489), ScaleType = Enum.ScaleType.Fit, Selectable = false,
                                         Size = UDim2.fromScale(0.257732, 0.257732),
+                                        [OnEvent "Activated"] = function()
+                                            Functions:OnPush("down")
+                                        end,
                                         [Children] = {
                                             s:New "ImageLabel" { 
                                                 Name = "DirectionArrow", AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, 
@@ -765,7 +964,7 @@ local function Component()
                                     },
                                     -- Direction buttons (Up)
                                     s:New "ImageButton" {
-                                        Active = false, AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1,
+                                        Active = true, AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1,
                                         Image = "rbxassetid://123413392379402",
                                         ImageColor3 = s:Computed(function(use)
                                             local lastDir = use(Functions.LastPushedDirection)
@@ -773,6 +972,9 @@ local function Component()
                                         end),
                                         Position = UDim2.fromScale(0.5, 0.187986), ScaleType = Enum.ScaleType.Fit, Selectable = false,
                                         Size = UDim2.fromScale(0.257732, 0.257732),
+                                        [OnEvent "Activated"] = function()
+                                            Functions:OnPush("up")
+                                        end,
                                         [Children] = {
                                             s:New "ImageLabel" { 
                                                 Name = "DirectionArrow", AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, 
@@ -794,35 +996,172 @@ local function Component()
                                 }
                             },
                             
-                            -- Exit Button
-                            s:New "TextButton" {
-                                Name = "Exit",
-                                Active = true,
-                                AnchorPoint = Vector2.new(0.5, 0.5),
-                                BackgroundTransparency = 1,
-                                FontFace = Font.new("rbxasset://fonts/families/FredokaOne.json"),
-                                Position = UDim2.fromScale(0.967374, 0.0296391),
-                                Rotation = -15,
-                                Size = UDim2.fromScale(0.111607, 0.102593),
-                                Text = "X",
-                                TextColor3 = Color3.fromRGB(255, 0, 4),
-                                TextScaled = true,
-                                [OnEvent "Activated"] = function()
-                                    Functions:Exit()
-                                end,
-                                [Children] = {
-                                    s:New "UIAspectRatioConstraint" {},
-                                    s:New "UIStroke" {
-                                        Color = Color3.fromRGB(214, 0, 4),
-                                        StrokeSizingMode = Enum.StrokeSizingMode.ScaledSize,
-                                        Thickness = 0.08,
-                                    },
+                            -- Exit Button with hover and click animations
+                            (function()
+                                local isHovered = s:Value(false)
+                                local isPressed = s:Value(false)
+                                
+                                local buttonScale = s:Spring(
+                                    s:Computed(function(use)
+                                        if use(isPressed) then return 0.85 end
+                                        if use(isHovered) then return 1.15 end
+                                        return 1
+                                    end),
+                                    20, 0.6
+                                )
+                                
+                                local buttonRotation = s:Spring(
+                                    s:Computed(function(use)
+                                        local baseRotation = -15
+                                        if use(isPressed) then return baseRotation - 5 end
+                                        if use(isHovered) then return baseRotation + 10 end
+                                        return baseRotation
+                                    end),
+                                    15, 0.5
+                                )
+                                
+                                return s:New "TextButton" {
+                                    Name = "Exit",
+                                    Active = true,
+                                    AnchorPoint = Vector2.new(0.5, 0.5),
+                                    BackgroundTransparency = 1,
+                                    FontFace = Font.new("rbxasset://fonts/families/FredokaOne.json"),
+                                    Position = UDim2.fromScale(0.967374, 0.0296391),
+                                    Rotation = buttonRotation,
+                                    Size = s:Computed(function(use)
+                                        local scale = use(buttonScale)
+                                        return UDim2.fromScale(0.111607 * scale, 0.102593 * scale)
+                                    end),
+                                    Text = "X",
+                                    TextColor3 = s:Spring(s:Computed(function(use)
+                                        if use(isPressed) then return Color3.fromRGB(180, 0, 3) end
+                                        if use(isHovered) then return Color3.fromRGB(255, 50, 50) end
+                                        return Color3.fromRGB(255, 0, 4)
+                                    end), 15, 0.7),
+                                    TextScaled = true,
+                                    
+                                    [OnEvent "Activated"] = function()
+                                        Functions:Exit()
+                                    end,
+                                    
+                                    [OnEvent "MouseEnter"] = function()
+                                        if UserInputService.PreferredInput == Enum.PreferredInput.KeyboardAndMouse then
+                                            isHovered:set(true)
+                                        end
+                                    end,
+                                    
+                                    [OnEvent "MouseLeave"] = function()
+                                        isHovered:set(false)
+                                        isPressed:set(false)
+                                    end,
+                                    
+                                    [OnEvent "MouseButton1Down"] = function()
+                                        isPressed:set(true)
+                                    end,
+                                    
+                                    [OnEvent "MouseButton1Up"] = function()
+                                        isPressed:set(false)
+                                    end,
+                                    
+                                    [Children] = {
+                                        s:New "UIAspectRatioConstraint" {},
+                                        s:New "UIStroke" {
+                                            Color = s:Spring(s:Computed(function(use)
+                                                if use(isPressed) then return Color3.fromRGB(150, 0, 3) end
+                                                if use(isHovered) then return Color3.fromRGB(255, 50, 50) end
+                                                return Color3.fromRGB(214, 0, 4)
+                                            end), 15, 0.7),
+                                            StrokeSizingMode = Enum.StrokeSizingMode.ScaledSize,
+                                            Thickness = 0.08,
+                                        },
+                                    }
                                 }
-                            },
+                            end)(),
                         }
                     },
                 }
-            },
+            },  -- End of CanvasGroup
+                    
+                    -- Centered Countdown Text (outside CanvasGroup so it doesn't get dimmed)
+                    s:New "TextLabel" {
+                        Name = "CountdownText",
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        BackgroundTransparency = 1,
+                        FontFace = Font.new("rbxasset://fonts/families/HighwayGothic.json", Enum.FontWeight.Bold),
+                        Position = UDim2.fromScale(0.5, 0.467),
+                        Size = s:Spring(s:Computed(function(use)
+                            local showCountdown = use(Functions.ShowCountdown)
+                            if showCountdown then
+                                local num = use(Functions.CountdownNumber)
+                                -- Size increases as countdown progresses (3->2->1) with bigger pulse
+                                local baseSize = 0.15 + (4 - num) * 0.05
+                                return UDim2.fromScale(baseSize, baseSize)
+                            end
+                            return UDim2.fromScale(0, 0)
+                        end), 30, 0.4),
+                        Text = s:Computed(function(use)
+                            local num = use(Functions.CountdownNumber)
+                            return tostring(num)
+                        end),
+                        TextColor3 = s:Computed(function(use)
+                            local num = use(Functions.CountdownNumber)
+                            if num == 3 then return Color3.fromRGB(255, 220, 100)
+                            elseif num == 2 then return Color3.fromRGB(255, 180, 50)
+                            else return Color3.fromRGB(255, 100, 50)
+                            end
+                        end),
+                        TextScaled = true,
+                        TextTransparency = s:Spring(s:Computed(function(use)
+                            return use(Functions.ShowCountdown) and 0 or 1
+                        end), 20, 0.6),
+                        Visible = s:Computed(function(use)
+                            return use(Functions.ShowCountdown)
+                        end),
+                        ZIndex = 100,
+                        [Children] = {
+                            s:New "UIAspectRatioConstraint" { AspectRatio = 1 },
+                            s:New "UIStroke" {
+                                Color = Color3.fromRGB(180, 100, 0),
+                                Thickness = 3,
+                                Transparency = 0.2,
+                            },
+                        },
+                    },
+                    
+                    -- Success Text (outside CanvasGroup so it doesn't get dimmed)
+                    s:New "TextLabel" {
+                        Name = "SuccessText",
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        BackgroundTransparency = 1,
+                        FontFace = Font.new("rbxasset://fonts/families/HighwayGothic.json", Enum.FontWeight.Bold),
+                        Position = UDim2.fromScale(0.5, 0.467),
+                        Size = s:Spring(s:Computed(function(use)
+                            local showSuccess = use(Functions.ShowSuccess)
+                            return showSuccess and UDim2.fromScale(0.15, 0.06) or UDim2.fromScale(0, 0)
+                        end), 20, 0.5),
+                        Rotation = s:Spring(s:Computed(function(use)
+                            return use(Functions.ShowSuccess) and 0 or -15
+                        end), 15, 0.6),
+                        Text = "Complete!",
+                        TextColor3 = Color3.fromRGB(50, 255, 120),
+                        TextScaled = true,
+                        TextTransparency = s:Spring(s:Computed(function(use)
+                            return use(Functions.ShowSuccess) and 0 or 1
+                        end), 15, 0.6),
+                        Visible = s:Computed(function(use)
+                            return use(Functions.ShowSuccess)
+                        end),
+                        ZIndex = 100,
+                        [Children] = {
+                            s:New "UIStroke" {
+                                Color = Color3.fromRGB(0, 150, 70),
+                                Thickness = 3,
+                                Transparency = 0.2,
+                            },
+                        },
+                    },
+                }  -- End of RootContainer Children
+            },  -- End of RootContainer
         }
     }
 end

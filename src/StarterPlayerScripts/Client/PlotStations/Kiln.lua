@@ -14,7 +14,15 @@ setmetatable(Kiln, PlotStation)
 function Kiln.new(player: Player, stationModel: Model)
     local self = PlotStation.new(player, stationModel)
     setmetatable(self, Kiln)
-    self:SetupInteraction()
+    
+    -- Track if this client is the owner
+    self.isOwner = self.ownerPlayer.UserId == self.player.UserId
+    print(self.isOwner)
+    -- Only setup interaction for the owner
+    if self.isOwner then
+        self:SetupInteraction()
+    end
+    
     return self
 end
 
@@ -39,12 +47,13 @@ function Kiln:SetupInteraction()
     })
 end
 
+function Kiln:SetupVisuals() end
+
+
 function Kiln:OnUpgradeTriggered(player: Player)
-    print(player.Name .. " wants to upgrade the kiln")
 end
 
 function Kiln:OnTriggered(player: Player)
-    print(player.Name .. " wants to fire pottery at level " .. self.data.level .. " kiln ")
 end
 
 function Kiln:Destroy()

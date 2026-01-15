@@ -409,4 +409,88 @@ function ScriptUtils:CapitalizeFirstLetter(str: string): string
     end))
 end
 
+-- Calculate drying duration based on clay type, style, and optional multiplier
+-- Formula: baseDryTime (clayType) × dryTimeMultiplier (style) × dryTimeMultiplier (station level)
+function ScriptUtils:CalculateDryingDuration(clayType: string, styleKey: string, stationDryMultiplier: number?): number
+    -- Get base dry time from clay type
+    local clayTypeData = SharedConstants.clayTypes[clayType]
+    local baseDryTime = clayTypeData and clayTypeData.baseDryTime or 120
+    
+    -- Get style multiplier
+    local styleData = SharedConstants.pottteryData and SharedConstants.pottteryData[styleKey]
+    local styleDryMultiplier = styleData and styleData.dryTimeMultiplier or 1.0
+    
+    -- Apply station level multiplier (e.g., from CoolingTable level stats)
+    local stationMultiplier = stationDryMultiplier or 1.0
+    
+    return math.floor(baseDryTime * styleDryMultiplier * stationMultiplier)
+end
+
+-- Calculate cooling duration based on clay type, style, and optional multiplier
+-- Formula: baseCoolTime (clayType) × coolTimeMultiplier (style) × coolTimeMultiplier (station level)
+function ScriptUtils:CalculateCoolingDuration(clayType: string, styleKey: string, stationCoolMultiplier: number?): number
+    -- Get base cool time from clay type
+    local clayTypeData = SharedConstants.clayTypes[clayType]
+    local baseCoolTime = clayTypeData and clayTypeData.baseCoolTime or 60
+    
+    -- Get style multiplier
+    local styleData = SharedConstants.pottteryData and SharedConstants.pottteryData[styleKey]
+    local styleCoolMultiplier = styleData and styleData.coolTimeMultiplier or 1.0
+    
+    -- Apply station level multiplier (e.g., from CoolingTable level stats)
+    local stationMultiplier = stationCoolMultiplier or 1.0
+    
+    return math.floor(baseCoolTime * styleCoolMultiplier * stationMultiplier)
+end
+
+-- Calculate drying progress (0 to 1) based on start time and duration
+function ScriptUtils:GetDryingProgress(dryingStartTime: number, dryingDuration: number): number
+    if not dryingStartTime or not dryingDuration or dryingDuration <= 0 then
+        return 0
+    end
+    
+    local elapsed = os.time() - dryingStartTime
+    local progress = math.clamp(elapsed / dryingDuration, 0, 1)
+    return progress
+end
+
+-- Apply easing to a progress value
+function ScriptUtils:ApplyEasing(progress: number, easingStyle: Enum.EasingStyle, easingDirection: Enum.EasingDirection): number
+    -- Use TweenService's GetValue for accurate easing
+    local TweenService = game:GetService("TweenService")
+    return TweenService:GetValue(progress, easingStyle, easingDirection)
+end
+
+-- Get interpolated color for drying pottery
+function ScriptUtils:GetDryingColor(clayType: string, dryingProgress: number): Color3
+    local clayTypeInfo = SharedConstants.clayTypes[clayType]
+    if not clayTypeInfo then
+        clayTypeInfo = SharedConstants.clayTypes.normal
+    end
+    
+    local startColor = clayTypeInfo.color
+    local endColor = clayTypeInfo.driedColor
+    local easeInfo = clayTypeInfo.colorChangeEase
+    
+    -- Apply easing to the progress
+    local easedProgress = self:ApplyEasing(
+        dryingProgress, 
+        easeInfo.style or Enum.EasingStyle.Linear, 
+        easeInfo.direction or Enum.EasingDirection.Out
+    )
+    
+    -- Lerp between colors
+    return startColor:Lerp(endColor, easedProgress)
+end
+
+-- Check if pottery is fully dried based on start time and duration
+function ScriptUtils:IsDried(dryingStartTime: number, dryingDuration: number): boolean
+    if not dryingStartTime or not dryingDuration then
+        return false
+    end
+    
+    local elapsed = os.time() - dryingStartTime
+    return elapsed >= dryingDuration
+end
+
 return ScriptUtils

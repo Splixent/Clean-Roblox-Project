@@ -64,6 +64,18 @@ function PlotStation.new(ownerPlayer: Player, stationModel: Model)
     return self
 end
 
+function PlotStation:ColorizePotteryStyle(object, clayType)
+    for _, basePart in ipairs (object:GetDescendants()) do
+        if basePart:IsA("BasePart") and basePart.Material == Enum.Material.Mud then
+            basePart.Color = SharedConstants.clayTypes[clayType].color
+        end        
+    end
+
+    if object:IsA("BasePart") and object.Material == Enum.Material.Mud then
+        object.Color = SharedConstants.clayTypes[clayType].color
+    end
+end
+
 function PlotStation:SetupInteraction()
 end
 

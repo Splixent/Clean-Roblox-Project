@@ -4,4 +4,11 @@ return {
     EquipItem = require(script.EquipItem),
     ActivateItem = require(script.ActivateItem),
     InsertClay = require(script.InsertClay),
+    SetPotteryStyle = require(script.SetPotteryStyle),
+    CancelPottery = require(script.CancelPottery),
+    CompletePottery = require(script.CompletePottery),
+    UpdatePotteryShaping = require(script.UpdatePotteryShaping),
+    CoolPottery = require(script.CoolPottery),
+    CollectPottery = require(script.CollectPottery),
+    DeletePottery = require(script.DeletePottery),
 }
