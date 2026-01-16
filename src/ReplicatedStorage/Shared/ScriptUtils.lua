@@ -443,6 +443,66 @@ function ScriptUtils:CalculateCoolingDuration(clayType: string, styleKey: string
     return math.floor(baseCoolTime * styleCoolMultiplier * stationMultiplier)
 end
 
+-- Calculate firing duration based on clay type, style, and optional multiplier
+-- Formula: baseFireTime (clayType) × fireTimeMultiplier (style) × fireTimeMultiplier (station level)
+function ScriptUtils:CalculateFiringDuration(clayType: string, styleKey: string, stationFireMultiplier: number?): number
+    -- Get base fire time from clay type
+    local clayTypeData = SharedConstants.clayTypes[clayType]
+    local baseFireTime = clayTypeData and clayTypeData.baseFireTime or 300
+    
+    -- Get style multiplier
+    local styleData = SharedConstants.pottteryData and SharedConstants.pottteryData[styleKey]
+    local styleFireMultiplier = styleData and styleData.fireTimeMultiplier or 1.0
+    
+    -- Apply station level multiplier (e.g., from Kiln level stats)
+    local stationMultiplier = stationFireMultiplier or 1.0
+    
+    return math.floor(baseFireTime * styleFireMultiplier * stationMultiplier)
+end
+
+-- Get interpolated color for firing pottery (dried -> fired)
+function ScriptUtils:GetFiringColor(clayType: string, firingProgress: number): Color3
+    local clayTypeInfo = SharedConstants.clayTypes[clayType]
+    if not clayTypeInfo then
+        clayTypeInfo = SharedConstants.clayTypes.normal
+    end
+    
+    local startColor = clayTypeInfo.driedColor
+    local endColor = clayTypeInfo.firedColor
+    local easeInfo = clayTypeInfo.colorChangeEase
+    
+    -- Apply easing to the progress
+    local easedProgress = self:ApplyEasing(
+        firingProgress, 
+        easeInfo.style or Enum.EasingStyle.Linear, 
+        easeInfo.direction or Enum.EasingDirection.Out
+    )
+    
+    -- Lerp between colors
+    return startColor:Lerp(endColor, easedProgress)
+end
+
+-- Get firing progress (0 to 1) based on start time and duration
+function ScriptUtils:GetFiringProgress(firingStartTime: number, firingDuration: number): number
+    if not firingStartTime or not firingDuration or firingDuration <= 0 then
+        return 0
+    end
+    
+    local elapsed = os.time() - firingStartTime
+    local progress = math.clamp(elapsed / firingDuration, 0, 1)
+    return progress
+end
+
+-- Check if pottery is fully fired based on start time and duration
+function ScriptUtils:IsFired(firingStartTime: number, firingDuration: number): boolean
+    if not firingStartTime or not firingDuration then
+        return false
+    end
+    
+    local elapsed = os.time() - firingStartTime
+    return elapsed >= firingDuration
+end
+
 -- Calculate drying progress (0 to 1) based on start time and duration
 function ScriptUtils:GetDryingProgress(dryingStartTime: number, dryingDuration: number): number
     if not dryingStartTime or not dryingDuration or dryingDuration <= 0 then
@@ -491,6 +551,28 @@ function ScriptUtils:IsDried(dryingStartTime: number, dryingDuration: number): b
     
     local elapsed = os.time() - dryingStartTime
     return elapsed >= dryingDuration
+end
+
+-- Get interpolated color for cooling fired pottery (firedColor -> cooledColor)
+function ScriptUtils:GetCoolingColor(clayType: string, coolingProgress: number): Color3
+    local clayTypeInfo = SharedConstants.clayTypes[clayType]
+    if not clayTypeInfo then
+        clayTypeInfo = SharedConstants.clayTypes.normal
+    end
+    
+    local startColor = clayTypeInfo.firedColor or clayTypeInfo.driedColor
+    local endColor = clayTypeInfo.cooledColor or clayTypeInfo.firedColor or clayTypeInfo.driedColor
+    local easeInfo = clayTypeInfo.colorChangeEase
+    
+    -- Apply easing to the progress
+    local easedProgress = self:ApplyEasing(
+        coolingProgress, 
+        easeInfo.style or Enum.EasingStyle.Linear, 
+        easeInfo.direction or Enum.EasingDirection.Out
+    )
+    
+    -- Lerp between colors
+    return startColor:Lerp(endColor, easedProgress)
 end
 
 return ScriptUtils

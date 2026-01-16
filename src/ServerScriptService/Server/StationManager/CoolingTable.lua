@@ -83,7 +83,6 @@ end
 -- Update replica data for cooling slots
 function CoolingTable:UpdateReplicaData()
 	local StationManager = require(script.Parent)
-	print("CoolingTable: Updating replica data for", self.ownerPlayer.Name, "coolingSlots:", self.data.coolingSlots)
 	StationManager:UpdateStationData(self.ownerPlayer, "CoolingTable", "coolingSlots", self.data.coolingSlots)
 end
 
@@ -107,44 +106,58 @@ function CoolingTable:SaveToPlayerData()
 	playerData:Set({"potteryStations", "CoolingTable"}, stationData)
 end
 
--- Add pottery to cooling table
-function CoolingTable:AddCoolingPottery(itemName: string, styleKey: string, dryingInfo: {clayType: string?, dryingStartTime: number?, dried: boolean?}?): (boolean, number?, number?)
+-- Add pottery to cooling table (supports both drying unfired pottery and cooling fired pottery)
+function CoolingTable:AddCoolingPottery(itemName: string, styleKey: string, potteryInfo: {clayType: string?, dried: boolean?, fired: boolean?}?): (boolean, number?, number?)
 	local slotIndex = self:GetNextAvailableSlot()
 	if not slotIndex then
 		return false, nil, nil -- No slots available
 	end
 	
-	-- Get clay type from drying info or from style data
-	local clayType = dryingInfo and dryingInfo.clayType
+	-- Get clay type from pottery info or from style data
+	local clayType = potteryInfo and potteryInfo.clayType
 	if not clayType then
 		local styleData = SharedConstants.pottteryData and SharedConstants.pottteryData[styleKey]
 		clayType = styleData and styleData.clayType or "normal"
 	end
 	
-	-- Calculate cooling time at runtime:
-	-- baseCoolTime (clayType) × coolTimeMultiplier (style) × coolTimeMultiplier (station level)
+	-- Determine if this is drying mode (unfired) or cooling mode (fired)
+	local isFired = potteryInfo and potteryInfo.fired or false
+	local isDried = potteryInfo and potteryInfo.dried or false
+	
+	-- Calculate time based on mode:
+	-- Drying mode (unfired): baseDryTime × dryTimeMultiplier
+	-- Cooling mode (fired): baseCoolTime × coolTimeMultiplier
 	local levelStats = self:GetLevelStats()
-	local stationCoolMultiplier = levelStats.coolTimeMultiplier or 1.0
-	local coolingTime = ScriptUtils:CalculateCoolingDuration(clayType, styleKey, stationCoolMultiplier)
+	local duration
+	
+	if isFired then
+		-- Cooling mode - use cooling duration
+		local stationCoolMultiplier = levelStats.coolTimeMultiplier or 1.0
+		duration = ScriptUtils:CalculateCoolingDuration(clayType, styleKey, stationCoolMultiplier)
+	else
+		-- Drying mode - use drying duration
+		local stationDryMultiplier = levelStats.dryTimeMultiplier or 1.0
+		duration = ScriptUtils:CalculateDryingDuration(clayType, styleKey, stationDryMultiplier)
+	end
 	
 	-- Get current server time
 	local startTime = os.time()
-	local endTime = startTime + coolingTime
+	local endTime = startTime + duration
 	
 	-- Update data
 	if not self.data.coolingSlots then
 		self.data.coolingSlots = {}
 	end
 	
-	-- Store slot data including drying info for visual updates
+	-- Store slot data including pottery state for visual updates
 	local slotData = {
 		itemName = itemName,
 		styleKey = styleKey,
 		startTime = startTime,
 		endTime = endTime,
 		clayType = clayType, -- Store for client-side duration calculations
-		dryingStartTime = startTime, -- Drying starts when placed on table
-		dried = dryingInfo and dryingInfo.dried or false, -- Copy dried status if already dried
+		dried = isDried, -- Track dried state
+		fired = isFired, -- Track fired state (determines drying vs cooling mode)
 	}
 	
 	self.data.coolingSlots[tostring(slotIndex)] = slotData
@@ -177,20 +190,13 @@ function CoolingTable:CollectPottery(slotIndex: number): (boolean, string?, stri
 		return false, nil, "NoItemInSlot", nil
 	end
 	
-	-- Check if cooling is complete
+	-- Check if time is complete
 	if os.time() < slotData.endTime then
 		return false, nil, "NotReady", nil
 	end
 	
 	local styleKey = slotData.styleKey
-	
-	-- Check if drying is complete (calculate at runtime)
-	-- Note: Pottery on the CoolingTable is drying (unfired), not cooling
-	-- It needs to be fired in a Kiln before it can be "cooled"
-	local levelStats = self:GetLevelStats()
-	local dryTimeMultiplier = levelStats.dryTimeMultiplier or 1.0
-	local dryingDuration = ScriptUtils:CalculateDryingDuration(slotData.clayType or "normal", styleKey, dryTimeMultiplier)
-	local isDried = slotData.dried or ScriptUtils:IsDried(slotData.dryingStartTime, dryingDuration)
+	local wasFired = slotData.fired or false
 	
 	-- Remove from data
 	self.data.coolingSlots[tostring(slotIndex)] = nil
@@ -201,13 +207,26 @@ function CoolingTable:CollectPottery(slotIndex: number): (boolean, string?, stri
 	-- Save to persistent data
 	self:SaveToPlayerData()
 	
-	-- Return slot data for use in callback
-	-- Note: cooled is false because pottery must be fired first before it can cool
-	return true, styleKey, nil, {
-		clayType = slotData.clayType,
-		dried = isDried,
-		cooled = false, -- Cannot be cooled until fired in a Kiln
-	}
+	-- Return appropriate state based on mode:
+	-- Drying mode (was not fired): dried=true, fired=false, cooled=false
+	-- Cooling mode (was fired): dried=true, fired=true, cooled=true
+	if wasFired then
+		-- Cooling mode complete - pottery is now cooled
+		return true, styleKey, nil, {
+			clayType = slotData.clayType,
+			dried = true,
+			fired = true,
+			cooled = true,
+		}
+	else
+		-- Drying mode complete - pottery is now dried
+		return true, styleKey, nil, {
+			clayType = slotData.clayType,
+			dried = true,
+			fired = false,
+			cooled = false,
+		}
+	end
 end
 
 function CoolingTable:OnUpgradeTriggered(player: Player)
@@ -252,22 +271,22 @@ CoolPottery:SetCallback(function(player, stationId)
 		return { success = false, error = "NotPottery" }
 	end
 	
-	-- Check if it's unfired
-	if itemInfo.fired then
-		return { success = false, error = "AlreadyFired" }
+	-- Check if it's already cooled (fully processed)
+	if itemInfo.cooled then
+		return { success = false, error = "AlreadyCooled" }
 	end
 	
 	local styleKey = itemInfo.styleKey
 	
-	-- Extract drying info for visual updates (duration calculated at runtime by client)
-	local dryingInfo = {
+	-- Extract pottery info for visual updates and mode detection
+	local potteryInfo = {
 		clayType = itemInfo.clayType,
-		dryingStartTime = itemInfo.dryingStartTime,
 		dried = itemInfo.dried,
+		fired = itemInfo.fired, -- Determines drying vs cooling mode
 	}
 	
-	-- Add to cooling table with drying info
-	local success, slotIndex, endTime = instance:AddCoolingPottery(equippedItem, styleKey, dryingInfo)
+	-- Add to cooling table with pottery info
+	local success, slotIndex, endTime = instance:AddCoolingPottery(equippedItem, styleKey, potteryInfo)
 	if not success then
 		return { success = false, error = "NoSlotsAvailable" }
 	end
@@ -307,6 +326,7 @@ CollectPottery:SetCallback(function(player, stationId, slotIndex)
 	InventoryManager:AddPotteryItem(player, styleKey, function(itemData)
 		itemData.clayType = collectedData.clayType
 		itemData.dried = collectedData.dried
+		itemData.fired = collectedData.fired
 		itemData.cooled = collectedData.cooled
 		return itemData
 	end)

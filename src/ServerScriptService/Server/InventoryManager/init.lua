@@ -21,6 +21,7 @@ local Items = require(script.Items)
 
 local EquipItem = Events.EquipItem:Server()
 local ActivateItem = Events.ActivateItem:Server()
+local GlazePottery = Events.GlazePottery
 
 local InventoryManager = {}
 
@@ -370,6 +371,171 @@ function InventoryManager:CheckAllDryingStatus(player: Player)
 end
 
 -- No need for periodic drying checks since drying only happens on CoolingTable
+
+-- Apply glaze to a pottery item (color, pattern, finish)
+function InventoryManager:ApplyGlaze(player: Player, itemKey: string, glazeData: {color: string?, pattern: string?, finish: string?}): boolean
+    local playerData = DataObject.new(player, true)
+    if not playerData or not playerData.Replica or not playerData.Replica.Data then
+        return false
+    end
+    
+    local inventory = playerData.Replica.Data.inventory
+    if not inventory or not inventory.items then
+        return false
+    end
+    
+    local itemInfo = inventory.items[itemKey]
+    if not itemInfo or not itemInfo.potteryStyle then
+        warn(`[InventoryManager] {player.Name} tried to glaze {itemKey} but it's not a pottery item`)
+        return false
+    end
+    
+    -- Validate glaze data against constants
+    if glazeData.color then
+        local colorFound = false
+        for _, colorData in ipairs(SharedConstants.glazeTypes.colors) do
+            if colorData.name == glazeData.color then
+                colorFound = true
+                break
+            end
+        end
+        if not colorFound then
+            warn(`[InventoryManager] Invalid glaze color: {glazeData.color}`)
+            return false
+        end
+    end
+    
+    if glazeData.pattern and glazeData.pattern ~= "noPattern" then
+        local patternFound = false
+        
+        -- Check global patterns
+        for _, patternData in ipairs(SharedConstants.glazeTypes.patterns) do
+            if patternData.name == glazeData.pattern then
+                patternFound = true
+                break
+            end
+        end
+        
+        -- Check style-unique patterns if not found in global patterns
+        if not patternFound and itemInfo.styleKey then
+            local styleKey = itemInfo.styleKey
+            if SharedConstants.glazeTypes.uniquePatterns and SharedConstants.glazeTypes.uniquePatterns[styleKey] then
+                local styleUniqueData = SharedConstants.glazeTypes.uniquePatterns[styleKey]
+                if styleUniqueData.patterns then
+                    -- Handle both single pattern object and array of patterns
+                    local patternsToCheck = styleUniqueData.patterns
+                    for _, patternInfo in ipairs(patternsToCheck) do
+                        if patternInfo.name == glazeData.pattern then
+                            patternFound = true
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        
+        if not patternFound then
+            warn(`[InventoryManager] Invalid glaze pattern: {glazeData.pattern}`)
+            return false
+        end
+    end
+    
+    if glazeData.finish then
+        local finishFound = false
+        
+        -- Check global finishes
+        for _, finishData in ipairs(SharedConstants.glazeTypes.finishes) do
+            if finishData.name == glazeData.finish then
+                finishFound = true
+                break
+            end
+        end
+        
+        -- Check style-unique pattern finishes if not found in global finishes
+        if not finishFound and itemInfo.styleKey and glazeData.pattern then
+            local styleKey = itemInfo.styleKey
+            if SharedConstants.glazeTypes.uniquePatterns and SharedConstants.glazeTypes.uniquePatterns[styleKey] then
+                local styleUniqueData = SharedConstants.glazeTypes.uniquePatterns[styleKey]
+                if styleUniqueData.patterns then
+                    local patternsToCheck = styleUniqueData.patterns
+                    if patternsToCheck.name then
+                        -- Single pattern object
+                        if patternsToCheck.name == glazeData.pattern and patternsToCheck.finishes then
+                            local finishesToCheck = patternsToCheck.finishes
+                            if finishesToCheck.name then
+                                -- Single finish object
+                                if finishesToCheck.name == glazeData.finish then
+                                    finishFound = true
+                                end
+                            else
+                                -- Array of finishes
+                                for _, finishData in ipairs(finishesToCheck) do
+                                    if finishData.name == glazeData.finish then
+                                        finishFound = true
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    else
+                        -- Array of patterns
+                        for _, patternData in ipairs(patternsToCheck) do
+                            if patternData.name == glazeData.pattern and patternData.finishes then
+                                local finishesToCheck = patternData.finishes
+                                if finishesToCheck.name then
+                                    if finishesToCheck.name == glazeData.finish then
+                                        finishFound = true
+                                    end
+                                else
+                                    for _, finishData in ipairs(finishesToCheck) do
+                                        if finishData.name == glazeData.finish then
+                                            finishFound = true
+                                            break
+                                        end
+                                    end
+                                end
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        if not finishFound then
+            warn(`[InventoryManager] Invalid glaze finish: {glazeData.finish}`)
+            return false
+        end
+    end
+    
+    -- Apply glaze data to the item
+    itemInfo.glaze = {
+        color = glazeData.color,
+        pattern = glazeData.pattern or "noPattern",
+        finish = glazeData.finish,
+    }
+    itemInfo.glazed = true
+    
+    -- Save the updated inventory
+    playerData.Replica:Set({"inventory"}, inventory)
+    
+    -- Update the held item's visual if it's currently equipped
+    local playerItem = self.PlayerItems[player]
+    if playerItem and playerItem.UniqueKey == itemKey and playerItem.UpdateToolColor then
+        playerItem:UpdateToolColor()
+    end
+    
+    return true
+end
+
+-- Handle glaze pottery event from client
+GlazePottery:SetCallback(function(player, itemKey, glazeData)
+    if not itemKey or not glazeData then
+        return false
+    end
+    
+    return InventoryManager:ApplyGlaze(player, itemKey, glazeData)
+end)
 
 -- Clean up when player leaves
 Players.PlayerRemoving:Connect(function(player)

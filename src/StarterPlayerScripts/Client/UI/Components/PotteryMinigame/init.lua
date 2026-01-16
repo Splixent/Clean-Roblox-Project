@@ -9,6 +9,7 @@ local MinigameClayTemplate = GameObjects:WaitForChild("MinigameClay")
 
 local Fusion = require(Shared.Fusion)
 local Functions = require(script.Functions)
+local ExitButton = require(script.Parent.Parent.ExitButton)
 
 local Children = Fusion.Children
 local OnEvent = Fusion.OnEvent
@@ -997,86 +998,14 @@ local function Component()
                             },
                             
                             -- Exit Button with hover and click animations
-                            (function()
-                                local isHovered = s:Value(false)
-                                local isPressed = s:Value(false)
-                                
-                                local buttonScale = s:Spring(
-                                    s:Computed(function(use)
-                                        if use(isPressed) then return 0.85 end
-                                        if use(isHovered) then return 1.15 end
-                                        return 1
-                                    end),
-                                    20, 0.6
-                                )
-                                
-                                local buttonRotation = s:Spring(
-                                    s:Computed(function(use)
-                                        local baseRotation = -15
-                                        if use(isPressed) then return baseRotation - 5 end
-                                        if use(isHovered) then return baseRotation + 10 end
-                                        return baseRotation
-                                    end),
-                                    15, 0.5
-                                )
-                                
-                                return s:New "TextButton" {
-                                    Name = "Exit",
-                                    Active = true,
-                                    AnchorPoint = Vector2.new(0.5, 0.5),
-                                    BackgroundTransparency = 1,
-                                    FontFace = Font.new("rbxasset://fonts/families/FredokaOne.json"),
-                                    Position = UDim2.fromScale(0.967374, 0.0296391),
-                                    Rotation = buttonRotation,
-                                    Size = s:Computed(function(use)
-                                        local scale = use(buttonScale)
-                                        return UDim2.fromScale(0.111607 * scale, 0.102593 * scale)
-                                    end),
-                                    Text = "X",
-                                    TextColor3 = s:Spring(s:Computed(function(use)
-                                        if use(isPressed) then return Color3.fromRGB(180, 0, 3) end
-                                        if use(isHovered) then return Color3.fromRGB(255, 50, 50) end
-                                        return Color3.fromRGB(255, 0, 4)
-                                    end), 15, 0.7),
-                                    TextScaled = true,
-                                    
-                                    [OnEvent "Activated"] = function()
-                                        Functions:Exit()
-                                    end,
-                                    
-                                    [OnEvent "MouseEnter"] = function()
-                                        if UserInputService.PreferredInput == Enum.PreferredInput.KeyboardAndMouse then
-                                            isHovered:set(true)
-                                        end
-                                    end,
-                                    
-                                    [OnEvent "MouseLeave"] = function()
-                                        isHovered:set(false)
-                                        isPressed:set(false)
-                                    end,
-                                    
-                                    [OnEvent "MouseButton1Down"] = function()
-                                        isPressed:set(true)
-                                    end,
-                                    
-                                    [OnEvent "MouseButton1Up"] = function()
-                                        isPressed:set(false)
-                                    end,
-                                    
-                                    [Children] = {
-                                        s:New "UIAspectRatioConstraint" {},
-                                        s:New "UIStroke" {
-                                            Color = s:Spring(s:Computed(function(use)
-                                                if use(isPressed) then return Color3.fromRGB(150, 0, 3) end
-                                                if use(isHovered) then return Color3.fromRGB(255, 50, 50) end
-                                                return Color3.fromRGB(214, 0, 4)
-                                            end), 15, 0.7),
-                                            StrokeSizingMode = Enum.StrokeSizingMode.ScaledSize,
-                                            Thickness = 0.08,
-                                        },
-                                    }
-                                }
-                            end)(),
+                            ExitButton.new(s, {
+                                Position = UDim2.fromScale(0.967374, 0.0296391),
+                                Size = UDim2.fromScale(0.111607, 0.102593),
+                                BaseRotation = -15,
+                                OnActivated = function()
+                                    Functions:Exit()
+                                end,
+                            }),
                         }
                     },
                 }

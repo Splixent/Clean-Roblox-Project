@@ -28,17 +28,33 @@ local Constants = {
                         
                     }
                 },
-                Kiln = {level = 0},
+                Kiln = {
+                    level = 0,
+                    firingPottery = {
+                        
+                    }
+                },
                 PottersWheel = {level = 0},
                 GlazeTable = {level = 0},
             },
+             
             inventory =  {
                 hotbar =  {
-                   "Clay"
+                    "Clay",
+                    "bowl_1"
                 },
                 items =  {
                     Clay =  {
-                        amount = 50
+                        amount = 45
+                    },
+                    bowl_1 =  {
+                        amount = 1,
+                        clayType = "normal",
+                        cooled = true,
+                        dried = true,
+                        fired = true,
+                        potteryStyle = true,
+                        styleKey = "bowl"
                     }
                 }
             }

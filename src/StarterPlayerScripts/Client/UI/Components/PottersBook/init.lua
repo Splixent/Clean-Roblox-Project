@@ -9,6 +9,7 @@ local Client = Players.LocalPlayer.PlayerScripts.Client
 local Fusion = require(Shared.Fusion)
 local SharedConstants = require(Shared.Constants)
 local Functions = require(script.Functions)
+local ExitButton = require(script.Parent.Parent.ExitButton)
 
 local Children = Fusion.Children
 local OnEvent = Fusion.OnEvent
@@ -770,81 +771,15 @@ return s:New "Frame" {
                     }
                 },
                 
-                -- Exit button with jiggle and hover effects
-                (function()
-                    local isHovered = s:Value(false)
-                    local isPressed = s:Value(false)
-                    
-                    local buttonScale = s:Spring(
-                        s:Computed(function(use)
-                            if use(isPressed) then return 0.9 end
-                            if use(isHovered) then return 1.15 end
-                            return 1
-                        end),
-                        20, 0.6
-                    )
-                    
-                    local buttonRotation = s:Spring(
-                        s:Computed(function(use)
-                            local baseRotation = use(Functions.IsOpen) and -15 or 0
-                            if use(isHovered) then return baseRotation + 10 end
-                            return baseRotation
-                        end),
-                        15, 0.5
-                    )
-                    
-                    return s:New "TextButton" {
-                        Name = "Exit",
-                        AnchorPoint = Vector2.new(0.5, 0.5),
-                        BackgroundTransparency = 1,
-                        FontFace = Font.new("rbxasset://fonts/families/FredokaOne.json"),
-                        Position = UDim2.fromScale(0.979167, -0.0503111),
-                        Rotation = buttonRotation,
-                        Size = s:Computed(function(use)
-                            local scale = use(buttonScale)
-                            return UDim2.fromScale(0.111607 * scale, 0.198597 * scale)
-                        end),
-                        Text = "X",
-                        TextColor3 = Color3.fromRGB(255, 0, 4),
-                        TextScaled = true,
-                        
-                        [OnEvent "Activated"] = function()
-                            Functions:Close()
-                        end,
-                        
-                        [OnEvent "MouseEnter"] = function()
-                            if UserInputService.PreferredInput == Enum.PreferredInput.KeyboardAndMouse then
-                                isHovered:set(true)
-                            end
-                        end,
-                        
-                        [OnEvent "MouseLeave"] = function()
-                            isHovered:set(false)
-                            isPressed:set(false)
-                        end,
-                        
-                        [OnEvent "MouseButton1Down"] = function()
-                            isPressed:set(true)
-                        end,
-                        
-                        [OnEvent "MouseButton1Up"] = function()
-                            isPressed:set(false)
-                        end,
-
-                        [Children] = {
-                            s:New "UIAspectRatioConstraint" {
-                                Name = "UIAspectRatioConstraint",
-                            },
-
-                            s:New "UIStroke" {
-                                Name = "UIStroke",
-                                Color = Color3.fromRGB(214, 0, 4),
-                                StrokeSizingMode = Enum.StrokeSizingMode.ScaledSize,
-                                Thickness = 0.08,
-                            }
-                        }
-                    }
-                end)(),
+                -- Exit button (using reusable component)
+                ExitButton.new(s, {
+                    Position = UDim2.fromScale(0.979167, -0.0503111),
+                    Size = UDim2.fromScale(0.111607, 0.198597),
+                    BaseRotation = -15,
+                    OnActivated = function()
+                        Functions:Close()
+                    end,
+                }),
             }
         },
     }

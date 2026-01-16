@@ -11,4 +11,8 @@ return {
     CoolPottery = require(script.CoolPottery),
     CollectPottery = require(script.CollectPottery),
     DeletePottery = require(script.DeletePottery),
+    FirePottery = require(script.FirePottery),
+    CollectKilnPottery = require(script.CollectKilnPottery),
+    DeleteKilnPottery = require(script.DeleteKilnPottery),
+    GlazePottery = require(script.GlazePottery),
 }

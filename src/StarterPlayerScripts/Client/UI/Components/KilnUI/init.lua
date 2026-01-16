@@ -43,7 +43,7 @@ local function CreateEmptySlot(slotScope, slotIndex: number)
 end
 
 -- Helper function to create a slot item for the scrolling frame
-local function CreateSlotItem(slotScope, slotData, slotIndex: number, coolingTableLevel: number?)
+local function CreateSlotItem(slotScope, slotData, slotIndex: number, kilnLevel: number?)
     local ss = slotScope
     
     -- Get style data
@@ -56,35 +56,38 @@ local function CreateSlotItem(slotScope, slotData, slotIndex: number, coolingTab
     local clayTypeData = SharedConstants.clayTypes[clayType] or SharedConstants.clayTypes.normal
     
     -- Get level stats for multipliers
-    local levelKey = tostring(coolingTableLevel or 0)
-    local levelStats = SharedConstants.potteryStationInfo.CoolingTable.levelStats[levelKey] or SharedConstants.potteryStationInfo.CoolingTable.levelStats["0"]
-    local dryTimeMultiplier = levelStats.dryTimeMultiplier or 1.0
-    local coolTimeMultiplier = levelStats.coolTimeMultiplier or 1.0
+    local levelKey = tostring(kilnLevel or 0)
+    local levelStats = SharedConstants.potteryStationInfo.Kiln.levelStats[levelKey] or SharedConstants.potteryStationInfo.Kiln.levelStats["0"]
+    local fireTimeMultiplier = levelStats.fireTimeMultiplier or 1.0
     
-    -- Calculate actual durations using the same formula as server
-    local dryingDuration = ScriptUtils:CalculateDryingDuration(clayType, styleKey, dryTimeMultiplier)
-    local coolingDuration = ScriptUtils:CalculateCoolingDuration(clayType, styleKey, coolTimeMultiplier)
+    -- Calculate actual duration using the same formula as server
+    local firingDuration = ScriptUtils:CalculateFiringDuration(clayType, styleKey, fireTimeMultiplier)
     
-    -- Determine if this is cooling mode (fired pottery) or drying mode (unfired pottery)
-    local isCoolingMode = slotData.fired == true
-    
-    -- Progress color based on state: yellow for drying, blue for cooling
-    local dryingColor = Color3.fromRGB(255, 217, 55)
-    local coolingColor = Color3.fromRGB(55, 156, 255)
+    -- Progress color: orange/red for firing
+    local firingColor = Color3.fromRGB(255, 120, 55)
     local greyColor = Color3.fromRGB(140, 140, 140)
-    local progressColor = isCoolingMode and coolingColor or dryingColor
+    local progressColor = firingColor
     
-    -- Calculate correct total duration based on mode
-    local totalDuration = isCoolingMode and coolingDuration or dryingDuration
+    local totalDuration = firingDuration
     
     -- Reactive state
     local RemainingTime = ss:Value(0)
     
-    -- Progress (0 to 1) - directly computed, no spring for linear motion
-    local Progress = ss:Computed(function(use)
-        local remaining = use(RemainingTime)
-        if totalDuration <= 0 then return 1 end
-        return math.clamp(1 - (remaining / totalDuration), 0, 1)
+    -- Calculate time offset between os.time() and tick() for sub-second precision
+    local timeOffset = tick() - os.time()
+    
+    -- Smooth progress value that updates every frame
+    local SmoothProgress = ss:Value(0)
+    local lastProgress = 0
+    
+    -- Progress Left rotation: 0% = 0, 50% = 0, 100% = 180 (directly from smooth progress)
+    local AnimatedLeftRotation = ss:Computed(function(use)
+        local progress = use(SmoothProgress)
+        if progress < 0.5 then
+            return 0
+        else
+            return (progress - 0.5) * 2 * 180
+        end
     end)
     
     -- Is complete
@@ -92,27 +95,80 @@ local function CreateSlotItem(slotScope, slotData, slotIndex: number, coolingTab
         return use(RemainingTime) <= 0
     end)
     
-    -- Flash spring for green glow (uses setPosition for instant flashes)
+    -- Flash spring for green glow
     local FlashValue = ss:Value(0)
     local FlashSpring = ss:Spring(FlashValue, 25, 0.5)
     
     -- Viewport model color (reactive for smooth color changes)
-    local ViewportModelColor = ss:Value(clayTypeData.color)
+    local ViewportModelColor = ss:Value(clayTypeData.driedColor or clayTypeData.color)
     
-    -- Calculate time offset between os.time() and tick() for sub-second precision
-    local timeOffset = tick() - os.time()
+    local LeftGradientTransparency = ss:Computed(function(use)
+        if use(IsComplete) then
+            return NumberSequence.new(1)
+        end
+        return NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(0.5, 0),
+            NumberSequenceKeypoint.new(0.501, 1),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+    end)
     
-    -- Update timer and flash
+    -- Progress Right rotation: smooth lerp 0-50%, snap at 50%, stay at -180 after
+    local AnimatedRightRotation = ss:Value(-180)
+    
+    local RightColor = ss:Computed(function(use)
+        local progress = use(SmoothProgress)
+        if progress < 0.5 then
+            return progressColor
+        else
+            return greyColor
+        end
+    end)
+    
+    local RightGradientTransparency = ss:Computed(function(use)
+        if use(IsComplete) then
+            return NumberSequence.new(1)
+        end
+        return NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(0.5, 0),
+            NumberSequenceKeypoint.new(0.501, 1),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+    end)
+    
+    -- Update timer, flash, and progress
     local flashTimer = 0
     local flashState = false
     local updateConnection = RunService.Heartbeat:Connect(function(dt)
         local currentTick = tick()
         
-        -- Calculate remaining time based on end time (sub-second precision)
+        -- Calculate remaining time with sub-second precision
+        local startTick = slotData.startTime + timeOffset
         local endTick = slotData.endTime + timeOffset
         local remaining = math.max(0, endTick - currentTick)
         
         RemainingTime:set(remaining)
+        
+        -- Calculate smooth progress
+        local currentProgress = math.clamp(1 - (remaining / totalDuration), 0, 1)
+        
+        -- Detect snap: progress crossed 0.5 threshold
+        local crossedHalf = (lastProgress < 0.5 and currentProgress >= 0.5)
+        
+        -- Update smooth progress
+        SmoothProgress:set(currentProgress)
+        
+        -- Right rotation: smooth lerp 0-50%, snap at 50%, stay at -180 after
+        if currentProgress < 0.5 then
+            local rightRot = -180 + (currentProgress * 2 * 180)
+            AnimatedRightRotation:set(rightRot)
+        elseif crossedHalf then
+            AnimatedRightRotation:set(-180)
+        end
+        
+        lastProgress = currentProgress
         
         -- Flash green when complete
         local allComplete = remaining <= 0
@@ -126,17 +182,12 @@ local function CreateSlotItem(slotScope, slotData, slotIndex: number, coolingTab
             end
         end
         
-        -- Update viewport model color based on mode and progress
-        local progress = math.clamp(1 - (remaining / totalDuration), 0, 1)
-        local currentColor
-        if isCoolingMode then
-            -- Cooling mode: firedColor -> cooledColor
-            currentColor = ScriptUtils:GetCoolingColor(clayType, progress)
-        else
-            -- Drying mode: wetColor -> driedColor
-            currentColor = ScriptUtils:GetDryingColor(clayType, progress)
+        -- Update viewport model color based on firing progress
+        if slotData.startTime then
+            local firingProgress = ScriptUtils:GetFiringProgress(slotData.startTime, firingDuration)
+            local currentColor = ScriptUtils:GetFiringColor(clayType, firingProgress)
+            ViewportModelColor:set(currentColor)
         end
-        ViewportModelColor:set(currentColor)
     end)
     table.insert(slotScope, updateConnection)
     
@@ -157,18 +208,10 @@ local function CreateSlotItem(slotScope, slotData, slotIndex: number, coolingTab
     local viewportModel = modelTemplate and modelTemplate:Clone() or nil
     local modelParts = {}
     if viewportModel then
-        -- Calculate initial color based on mode
-        local initialProgress = 0
-        if slotData.startTime and slotData.endTime then
-            local elapsed = os.time() - slotData.startTime
-            initialProgress = math.clamp(elapsed / totalDuration, 0, 1)
-        end
-        
-        local currentColor
-        if isCoolingMode then
-            currentColor = ScriptUtils:GetCoolingColor(clayType, initialProgress)
-        else
-            currentColor = ScriptUtils:GetDryingColor(clayType, initialProgress)
+        local currentColor = clayTypeData.driedColor or clayTypeData.color
+        if slotData.startTime then
+            local firingProgress = ScriptUtils:GetFiringProgress(slotData.startTime, firingDuration)
+            currentColor = ScriptUtils:GetFiringColor(clayType, firingProgress)
         end
         
         for _, part in ipairs(viewportModel:GetDescendants()) do
@@ -195,82 +238,6 @@ local function CreateSlotItem(slotScope, slotData, slotIndex: number, coolingTab
         Name = "Camera",
         CFrame = CFrame.new(0, 20, 20) * CFrame.Angles(math.rad(-20), 0, 0),
     }
-    
-    -- Smooth progress value that updates every frame
-    local SmoothProgress = ss:Value(0)
-    local lastProgress = 0
-    
-    -- Progress Left rotation: 0% = 0, 50% = 0, 100% = 180 (directly from smooth progress)
-    local AnimatedLeftRotation = ss:Computed(function(use)
-        local progress = use(SmoothProgress)
-        if progress < 0.5 then
-            return 0
-        else
-            return (progress - 0.5) * 2 * 180
-        end
-    end)
-    
-    local LeftGradientTransparency = ss:Computed(function(use)
-        if use(IsComplete) then
-            return NumberSequence.new(1)
-        end
-        return NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 0),
-            NumberSequenceKeypoint.new(0.5, 0),
-            NumberSequenceKeypoint.new(0.501, 1),
-            NumberSequenceKeypoint.new(1, 1),
-        })
-    end)
-    
-    -- Progress Right rotation: 0% = -180, 50% = 0, then snaps to -180 for 50-100%
-    local AnimatedRightRotation = ss:Value(-180)
-    
-    -- Update smooth progress every frame
-    local rotationUpdateConnection = RunService.Heartbeat:Connect(function(dt)
-        local remaining = peek(RemainingTime)
-        local currentProgress = math.clamp(1 - (remaining / totalDuration), 0, 1)
-        
-        -- Detect snap: progress crossed 0.5 threshold
-        local crossedHalf = (lastProgress < 0.5 and currentProgress >= 0.5)
-        
-        -- Update smooth progress
-        SmoothProgress:set(currentProgress)
-        
-        -- Right rotation: smooth lerp 0-50%, snap at 50%, stay at -180 after
-        if currentProgress < 0.5 then
-            -- Smoothly rotate from -180 to 0
-            local rightRot = -180 + (currentProgress * 2 * 180)
-            AnimatedRightRotation:set(rightRot)
-        elseif crossedHalf then
-            -- Instant snap to -180
-            AnimatedRightRotation:set(-180)
-        end
-        -- After 50%, stays at -180 (no change needed)
-        
-        lastProgress = currentProgress
-    end)
-    table.insert(slotScope, rotationUpdateConnection)
-    
-    local RightColor = ss:Computed(function(use)
-        local progress = use(SmoothProgress)
-        if progress < 0.5 then
-            return progressColor
-        else
-            return greyColor
-        end
-    end)
-    
-    local RightGradientTransparency = ss:Computed(function(use)
-        if use(IsComplete) then
-            return NumberSequence.new(1)
-        end
-        return NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 0),
-            NumberSequenceKeypoint.new(0.5, 0),
-            NumberSequenceKeypoint.new(0.501, 1),
-            NumberSequenceKeypoint.new(1, 1),
-        })
-    end)
     
     -- Background stroke color (flashes green when complete)
     local StrokeColor = ss:Computed(function(use)
@@ -536,7 +503,7 @@ end
 local function GenerateSlots()
     local slotsData = peek(Functions.SlotsData)
     local maxSlots = peek(Functions.MaxSlots)
-    local coolingTableLevel = peek(Functions.CoolingTableLevel)
+    local kilnLevel = peek(Functions.KilnLevel)
     
     -- Cleanup previous slots
     Functions:CleanupSlots()
@@ -549,7 +516,7 @@ local function GenerateSlots()
         
         local slotData = slotsData[tostring(slotIndex)]
         if slotData and slotData.styleKey then
-            table.insert(slotItems, CreateSlotItem(slotScope, slotData, slotIndex, coolingTableLevel))
+            table.insert(slotItems, CreateSlotItem(slotScope, slotData, slotIndex, kilnLevel))
         else
             table.insert(slotItems, CreateEmptySlot(slotScope, slotIndex))
         end
@@ -563,7 +530,7 @@ local SlotsChildren = s:Computed(function(use)
     -- Subscribe to reactive state
     use(Functions.SlotsData)
     use(Functions.MaxSlots)
-    use(Functions.CoolingTableLevel)
+    use(Functions.KilnLevel)
     use(Functions.IsOpen)
     
     -- Only generate slots when open
@@ -582,7 +549,7 @@ end)
 
 -- Build the UI
 return s:New "Frame" {
-    Name = "CoolingTable",
+    Name = "KilnUI",
     AnchorPoint = Vector2.new(0.5, 0.5),
     BackgroundTransparency = 1,
     Position = Functions.AnimatedPosition,
@@ -603,7 +570,7 @@ return s:New "Frame" {
         },
 
         s:New "CanvasGroup" {
-            Name = "CoolingTableCanvas",
+            Name = "KilnCanvas",
             AnchorPoint = Vector2.new(0.5, 0.5),
             BackgroundTransparency = 1,
             Position = UDim2.fromScale(0.500709, 0.47138),
@@ -632,7 +599,7 @@ return s:New "Frame" {
                             CellPadding = UDim2.fromOffset(16, 16),
                             CellSize = UDim2.fromOffset(201, 201),
                             SortOrder = Enum.SortOrder.LayoutOrder,
-                            FillDirection = Enum.FillDirection.Vertical,
+                            FillDirection = Enum.FillDirection.Horizontal,
                             HorizontalAlignment = Enum.HorizontalAlignment.Left,
                             VerticalAlignment = Enum.VerticalAlignment.Top,
                         },

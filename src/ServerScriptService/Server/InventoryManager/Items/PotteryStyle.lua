@@ -57,6 +57,16 @@ end
 function PotteryStyle:GetCurrentColor()
     local itemInfo = self:GetItemInfo()
     
+    -- Check for glaze color first
+    if itemInfo and itemInfo.glaze and itemInfo.glaze.color then
+        -- Get the glaze color from SharedConstants
+        for _, colorData in ipairs(SharedConstants.glazeTypes.colors) do
+            if colorData.name == itemInfo.glaze.color then
+                return colorData.color
+            end
+        end
+    end
+    
     -- Get clay type from item info (preferred) or style data (fallback)
     local clayType = (itemInfo and itemInfo.clayType) or (self.StyleData and self.StyleData.clayType)
     if not clayType then
@@ -72,8 +82,15 @@ function PotteryStyle:GetCurrentColor()
         return clayTypeData.color
     end
     
-    -- If already dried, fired, or cooled, use driedColor
-    if itemInfo.dried or itemInfo.fired or itemInfo.cooled then
+    -- Return color based on pottery state progression
+    if itemInfo.cooled then
+        -- Fully processed: cooledColor
+        return clayTypeData.cooledColor or clayTypeData.firedColor or clayTypeData.driedColor or clayTypeData.color
+    elseif itemInfo.fired then
+        -- Fired but not cooled: firedColor
+        return clayTypeData.firedColor or clayTypeData.driedColor or clayTypeData.color
+    elseif itemInfo.dried then
+        -- Dried but not fired: driedColor
         return clayTypeData.driedColor or clayTypeData.color
     end
     
@@ -81,12 +98,82 @@ function PotteryStyle:GetCurrentColor()
     return clayTypeData.color
 end
 
+-- Get SurfaceAppearance for pattern + finish from Assets/Glazes
+function PotteryStyle:GetSurfaceAppearance(pattern: string?, finish: string?): SurfaceAppearance?
+    local assetsFolder = ReplicatedStorage:FindFirstChild("Assets")
+    if not assetsFolder then return nil end
+    
+    local glazesFolder = assetsFolder:FindFirstChild("Glazes")
+    if not glazesFolder then return nil end
+    
+    -- Check style-unique patterns first
+    if pattern and pattern ~= "noPattern" then
+        local styleUniqueFolder = glazesFolder:FindFirstChild("StyleUniquePatterns")
+        if styleUniqueFolder then
+            local styleFolder = styleUniqueFolder:FindFirstChild(self.StyleKey)
+            if styleFolder then
+                local patternFolder = styleFolder:FindFirstChild(pattern)
+                if patternFolder and finish then
+                    local finishName = finish:sub(1,1):upper() .. finish:sub(2)
+                    local sa = patternFolder:FindFirstChild(finishName)
+                    if sa then return sa end
+                end
+            end
+        end
+    end
+    
+    -- No pattern - check for finish only
+    if not pattern or pattern == "noPattern" then
+        if not finish then return nil end
+        
+        local noPatternFolder = glazesFolder:FindFirstChild("noPattern")
+        if not noPatternFolder then return nil end
+        
+        local finishName = finish:sub(1,1):upper() .. finish:sub(2)
+        return noPatternFolder:FindFirstChild(finishName)
+    end
+    
+    -- Regular pattern folder
+    local patternFolder = glazesFolder:FindFirstChild(pattern)
+    if not patternFolder then return nil end
+    
+    if not finish then return nil end
+    
+    local finishName = finish:sub(1,1):upper() .. finish:sub(2)
+    return patternFolder:FindFirstChild(finishName)
+end
+
+-- Apply surface appearance to a part
+function PotteryStyle:ApplySurfaceAppearance(basePart: BasePart, surfaceAppearance: SurfaceAppearance?)
+    -- Remove existing surface appearances
+    for _, child in ipairs(basePart:GetChildren()) do
+        if child:IsA("SurfaceAppearance") then
+            child:Destroy()
+        end
+    end
+    
+    -- Add new surface appearance if provided
+    if surfaceAppearance then
+        local clone = surfaceAppearance:Clone()
+        clone.Parent = basePart
+    end
+end
+
 function PotteryStyle:ColorizeToolModel(tool: Tool)
     local currentColor = self:GetCurrentColor()
+    local itemInfo = self:GetItemInfo()
+    
+    -- Get pattern and finish from glaze data
+    local pattern = itemInfo and itemInfo.glaze and itemInfo.glaze.pattern
+    local finish = itemInfo and itemInfo.glaze and itemInfo.glaze.finish
+    
+    -- Get the surface appearance for this pattern/finish combo
+    local surfaceAppearance = self:GetSurfaceAppearance(pattern, finish)
     
 	for _, basePart in ipairs(tool:GetDescendants()) do
 		if basePart:IsA("BasePart") and basePart.Material == Enum.Material.Mud then
 			basePart.Color = currentColor
+            self:ApplySurfaceAppearance(basePart, surfaceAppearance)
 		end
 	end
 end
@@ -122,15 +209,24 @@ function PotteryStyle:GetToolModel()
     return tool
 end
 
--- Update the tool's color based on current drying progress
+-- Update the tool's color and surface appearance based on glaze data
 function PotteryStyle:UpdateToolColor()
     if not self.Tool then return end
     
     local currentColor = self:GetCurrentColor()
+    local itemInfo = self:GetItemInfo()
+    
+    -- Get pattern and finish from glaze data
+    local pattern = itemInfo and itemInfo.glaze and itemInfo.glaze.pattern
+    local finish = itemInfo and itemInfo.glaze and itemInfo.glaze.finish
+    
+    -- Get the surface appearance for this pattern/finish combo
+    local surfaceAppearance = self:GetSurfaceAppearance(pattern, finish)
     
     for _, basePart in ipairs(self.Tool:GetDescendants()) do
         if basePart:IsA("BasePart") and basePart.Material == Enum.Material.Mud then
             basePart.Color = currentColor
+            self:ApplySurfaceAppearance(basePart, surfaceAppearance)
         end
     end
 end

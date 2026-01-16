@@ -27,6 +27,11 @@ function PlotManager:LoadPlot(player, freePlot)
 
     player.RespawnLocation = plotTheme.SpawnLocation
 
+    task.spawn(function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        character:PivotTo(plotTheme.SpawnLocation.CFrame + Vector3.new(0, 5, 0))
+    end)
+
     freePlot.DefaultGround.Transparency = 1
     freePlot.DefaultGround.CanCollide = false
 

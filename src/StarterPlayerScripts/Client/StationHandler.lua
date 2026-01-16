@@ -26,11 +26,10 @@ function StationHandler:SetupStation(stationKey: string, stationData: any)
     
     local ownerPlayer = Players:GetPlayerByUserId(tonumber(ownerUserId))
     if not ownerPlayer then
-        warn("StationHandler: Could not find player with UserId", stationKey)
+        --warn("StationHandler: Could not find player with UserId", stationKey)
         return
     end
     
-    print(stationData.stationType)
     local stationInstance = StationHandlers[stationData.stationType].new(ownerPlayer, stationData.model)
     stationInstance:SetupVisuals()
     if not self.clientStations[ownerUserId] then

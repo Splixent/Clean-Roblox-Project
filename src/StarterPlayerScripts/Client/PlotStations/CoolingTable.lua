@@ -116,7 +116,7 @@ function CoolingTable:IsHoldingUnfiredPottery(): boolean
     if not itemInfo then return false end
     
     if not itemInfo.potteryStyle then return false end
-    if itemInfo.fired then return false end
+    if itemInfo.cooled then return false end -- Only reject already cooled pottery
     
     return true
 end
@@ -155,55 +155,53 @@ end
 
 -- Place a pottery model on a slot (client-side visual)
 function CoolingTable:PlacePotteryModel(slotIndex: number, styleKey: string)
-    print("CoolingTable Client: PlacePotteryModel called for slot", slotIndex, "styleKey:", styleKey)
-    
     local importantObjects = self.model:FindFirstChild("ImportantObjects")
     if not importantObjects then 
-        warn("CoolingTable Client: ImportantObjects not found")
+        --warn("CoolingTable Client: ImportantObjects not found")
         return 
     end
     
     local stationRoot = importantObjects:FindFirstChild("StationRoot")
     if not stationRoot then 
-        warn("CoolingTable Client: StationRoot not found")
+        --warn("CoolingTable Client: StationRoot not found")
         return 
     end
     
     local coolingLocation = stationRoot:FindFirstChild("CoolingLocation_" .. slotIndex)
     if not coolingLocation then 
-        warn("CoolingTable Client: CoolingLocation_" .. slotIndex .. " not found")
+        --warn("CoolingTable Client: CoolingLocation_" .. slotIndex .. " not found")
         return 
     end
     
     -- Get the pottery model template
     local potteryData = SharedConstants.pottteryData and SharedConstants.pottteryData[styleKey]
     if not potteryData then 
-        warn("CoolingTable Client: potteryData not found for", styleKey)
+        --warn("CoolingTable Client: potteryData not found for", styleKey)
         return 
     end
     
     local modelName = potteryData.name or styleKey
     local assetsFolder = ReplicatedStorage:FindFirstChild("Assets")
     if not assetsFolder then 
-        warn("CoolingTable Client: Assets folder not found")
+        --warn("CoolingTable Client: Assets folder not found")
         return 
     end
     
     local potteryStyles = assetsFolder:FindFirstChild("PotteryStyles")
     if not potteryStyles then 
-        warn("CoolingTable Client: PotteryStyles folder not found")
+        --warn("CoolingTable Client: PotteryStyles folder not found")
         return 
     end
     
     local styleFolder = potteryStyles:FindFirstChild(modelName)
     if not styleFolder then 
-        warn("CoolingTable Client: Style folder '" .. modelName .. "' not found")
+        --warn("CoolingTable Client: Style folder '" .. modelName .. "' not found")
         return 
     end
     
     local templateModel = styleFolder:FindFirstChild("Model")
     if not templateModel then 
-        warn("CoolingTable Client: Model not found in style folder")
+        --warn("CoolingTable Client: Model not found in style folder")
         return 
     end
     
@@ -241,11 +239,10 @@ function CoolingTable:PlacePotteryModel(slotIndex: number, styleKey: string)
     end
     
     self.slotModels[slotIndex] = potteryModel
-    print("CoolingTable Client: Successfully placed pottery model at slot", slotIndex)
 end
 
--- Get the current color for a pottery model based on drying state
-function CoolingTable:GetDryingColor(slotData): Color3
+-- Get the current color for a pottery model based on state (supports both drying and cooling)
+function CoolingTable:GetPotteryColor(slotData): Color3
     local clayType = slotData.clayType
     if not clayType then
         -- Fall back to style's clay type
@@ -258,22 +255,36 @@ function CoolingTable:GetDryingColor(slotData): Color3
         clayTypeData = SharedConstants.clayTypes.normal
     end
     
-    -- If already dried, use dried color
-    if slotData.dried then
-        return clayTypeData.driedColor or clayTypeData.color
-    end
+    -- Determine mode based on fired state
+    local isCoolingMode = slotData.fired == true
     
-    -- If we have drying timing info, calculate duration and interpolate
-    if slotData.dryingStartTime and slotData.styleKey then
+    -- Calculate progress based on start/end time
+    local progress = 0
+    if slotData.startTime and slotData.endTime then
         local levelStats = self:GetLevelStats()
-        local dryTimeMultiplier = levelStats.dryTimeMultiplier or 1.0
-        local dryingDuration = ScriptUtils:CalculateDryingDuration(clayType, slotData.styleKey, dryTimeMultiplier)
-        local dryingProgress = ScriptUtils:GetDryingProgress(slotData.dryingStartTime, dryingDuration)
-        return ScriptUtils:GetDryingColor(clayType, dryingProgress)
+        local duration
+        if isCoolingMode then
+            local coolTimeMultiplier = levelStats.coolTimeMultiplier or 1.0
+            duration = ScriptUtils:CalculateCoolingDuration(clayType, slotData.styleKey, coolTimeMultiplier)
+        else
+            local dryTimeMultiplier = levelStats.dryTimeMultiplier or 1.0
+            duration = ScriptUtils:CalculateDryingDuration(clayType, slotData.styleKey, dryTimeMultiplier)
+        end
+        local elapsed = os.time() - slotData.startTime
+        progress = math.clamp(elapsed / duration, 0, 1)
     end
     
-    -- Default to base color
-    return clayTypeData.color
+    -- Return color based on mode
+    if isCoolingMode then
+        return ScriptUtils:GetCoolingColor(clayType, progress)
+    else
+        return ScriptUtils:GetDryingColor(clayType, progress)
+    end
+end
+
+-- Backwards compatibility alias
+function CoolingTable:GetDryingColor(slotData): Color3
+    return self:GetPotteryColor(slotData)
 end
 
 -- Apply color to all mud parts in a pottery model
@@ -307,40 +318,38 @@ function CoolingTable:StartSlotColorUpdates(slotIndex: number, slotData)
     -- Stop any existing updates for this slot
     self:StopSlotColorUpdates(slotIndex)
     
-    -- Store drying data
+    -- Store slot data
     self.slotDryingData[slotIndex] = slotData
     
     local potteryModel = self.slotModels[slotIndex]
     if not potteryModel then return end
     
     -- Apply initial color
-    local initialColor = self:GetDryingColor(slotData)
+    local initialColor = self:GetPotteryColor(slotData)
     self:ApplyColorToModel(potteryModel, initialColor)
     
-    -- If already dried, no need to update
-    if slotData.dried then return end
-    
-    -- Calculate drying duration at runtime
+    -- Determine mode and calculate duration
+    local isCoolingMode = slotData.fired == true
     local clayType = slotData.clayType or "normal"
     local levelStats = self:GetLevelStats()
-    local dryTimeMultiplier = levelStats.dryTimeMultiplier or 1.0
-    local dryingDuration = ScriptUtils:CalculateDryingDuration(clayType, slotData.styleKey, dryTimeMultiplier)
+    local duration
     
-    print("CoolingTable: StartSlotColorUpdates - slot", slotIndex)
-    print("  clayType:", clayType)
-    print("  styleKey:", slotData.styleKey)
-    print("  dryTimeMultiplier:", dryTimeMultiplier)
-    print("  dryingDuration (calculated):", dryingDuration)
-    print("  dryingStartTime:", slotData.dryingStartTime)
+    if isCoolingMode then
+        local coolTimeMultiplier = levelStats.coolTimeMultiplier or 1.0
+        duration = ScriptUtils:CalculateCoolingDuration(clayType, slotData.styleKey, coolTimeMultiplier)
+    else
+        local dryTimeMultiplier = levelStats.dryTimeMultiplier or 1.0
+        duration = ScriptUtils:CalculateDryingDuration(clayType, slotData.styleKey, dryTimeMultiplier)
+    end
     
-    -- If no drying info, no updates needed
-    if not slotData.dryingStartTime or not slotData.styleKey then return end
+    -- If no timing info, no updates needed
+    if not slotData.startTime or not slotData.styleKey then return end
     
-    -- Check if drying is already complete
-    if ScriptUtils:IsDried(slotData.dryingStartTime, dryingDuration) then
-        local driedColor = self:GetDryingColor({ clayType = slotData.clayType, dried = true, styleKey = slotData.styleKey })
-        self:ApplyColorToModel(potteryModel, driedColor)
-        print("  Already dried, applying dried color")
+    -- Check if already complete
+    local elapsed = os.time() - slotData.startTime
+    if elapsed >= duration then
+        local finalColor = self:GetPotteryColor(slotData)
+        self:ApplyColorToModel(potteryModel, finalColor)
         return
     end
     
@@ -349,12 +358,10 @@ function CoolingTable:StartSlotColorUpdates(slotIndex: number, slotData)
         local lastColor = initialColor
         
         while potteryModel and potteryModel.Parent and self.slotModels[slotIndex] == potteryModel do
-            -- Get current drying progress (recalculate in case of station upgrades)
-            local currentLevelStats = self:GetLevelStats()
-            local currentDryTimeMultiplier = currentLevelStats.dryTimeMultiplier or 1.0
-            local currentDryingDuration = ScriptUtils:CalculateDryingDuration(clayType, slotData.styleKey, currentDryTimeMultiplier)
-            local currentProgress = ScriptUtils:GetDryingProgress(slotData.dryingStartTime, currentDryingDuration)
-            local targetColor = self:GetDryingColor(slotData)
+            -- Get current progress
+            local currentElapsed = os.time() - slotData.startTime
+            local currentProgress = math.clamp(currentElapsed / duration, 0, 1)
+            local targetColor = self:GetPotteryColor(slotData)
             
             -- Only tween if color changed significantly
             local colorDiff = math.abs(targetColor.R - lastColor.R) + 
@@ -366,12 +373,9 @@ function CoolingTable:StartSlotColorUpdates(slotIndex: number, slotData)
                 lastColor = targetColor
             end
             
-            -- Check if drying is complete
+            -- Check if complete
             if currentProgress >= 1 then
-                print("  Drying complete! Final progress:", currentProgress)
-                -- Apply final dried color
-                local driedColor = self:GetDryingColor({ clayType = clayType, dried = true, styleKey = slotData.styleKey })
-                self:TweenModelColor(potteryModel, driedColor, 0.8)
+                self:TweenModelColor(potteryModel, targetColor, 0.8)
                 break
             end
             
@@ -434,20 +438,6 @@ end
 
 -- Update visuals for a single slot
 function CoolingTable:UpdateSlotVisuals(slotIndex: number, slotData)
-    print("CoolingTable Client: UpdateSlotVisuals called for slot", slotIndex)
-    print("  slotData type:", type(slotData))
-    if type(slotData) == "table" then
-        print("  slotData.styleKey:", slotData.styleKey, "type:", type(slotData.styleKey))
-        print("  slotData.endTime:", slotData.endTime)
-        print("  slotData.itemName:", slotData.itemName)
-        print("  slotData.clayType:", slotData.clayType)
-        print("  slotData.dryingStartTime:", slotData.dryingStartTime)
-        print("  slotData.dryingDuration:", slotData.dryingDuration)
-        print("  slotData.dried:", slotData.dried)
-    else
-        print("  slotData value:", slotData)
-    end
-    
     if slotData then
         -- Place pottery model
         self:PlacePotteryModel(slotIndex, slotData.styleKey)
@@ -468,7 +458,6 @@ end
 -- Update all slot visuals from current replica data
 function CoolingTable:UpdateAllSlotVisuals()
     local coolingSlots = self:GetCoolingSlotsData()
-    print("CoolingTable Client: UpdateAllSlotVisuals called, coolingSlots:", coolingSlots)
     
     for i = 1, 4 do
         local slotData = coolingSlots[tostring(i)]
@@ -526,7 +515,7 @@ function CoolingTable:ShowCoolingTableUI()
                 startTime = slotData.startTime or os.time(),
                 endTime = slotData.endTime,
                 dried = slotData.dried,
-                dryingStartTime = slotData.dryingStartTime,
+                fired = slotData.fired, -- Track if in cooling mode (fired pottery)
             }
         end
     end
@@ -575,7 +564,6 @@ function CoolingTable:SetupVisuals()
     end
     
     local stationKey = self:GetStationKey()
-    print("CoolingTable: SetupVisuals for", stationKey)
     
     -- Initialize visuals from current data
     self:UpdateAllSlotVisuals()
@@ -586,17 +574,16 @@ function CoolingTable:SetupVisuals()
     -- Listen for any changes to the replica
     self.replicaMaid:GiveTask(stationReplica:OnChange(function(action, path, newValue, oldValue)
         -- Debug: show all changes
-        local pathStr = table.concat(path, ".")
-        warn("CoolingTable: OnChange fired - action:", action, "path:", pathStr, "expected stationKey:", stationKey, "path[2]:", path[2])
+        --local pathStr = table.concat(path, ".")
+        --warn("CoolingTable: OnChange fired - action:", action, "path:", pathStr, "expected stationKey:", stationKey, "path[2]:", path[2])
         
         -- Check if this change affects our station's cooling slots
         -- Path format: {"activeStations", stationKey, "coolingSlots"}
         if path[1] == "activeStations" and path[2] == stationKey then
-            warn("CoolingTable: Path matches our station!", "path[3]:", path[3])
+            --warn("CoolingTable: Path matches our station!", "path[3]:", path[3])
             if path[3] == "coolingSlots" then
-                print("CoolingTable: Detected cooling slots change for", stationKey)
                 local currentSlots = self:GetCoolingSlotsData()
-                warn("CoolingTable: Current slots from replica:", currentSlots)
+                --warn("CoolingTable: Current slots from replica:", currentSlots)
                 
                 -- Check each slot for changes
                 for i = 1, 4 do
@@ -608,7 +595,6 @@ function CoolingTable:SetupVisuals()
                 local oldStyleKey = oldData and oldData.styleKey
                 
                 if newStyleKey ~= oldStyleKey then
-                    print("CoolingTable: Slot", i, "changed from", oldStyleKey, "to", newStyleKey)
                     self:UpdateSlotVisuals(i, newData)
                 end
             end
@@ -627,24 +613,23 @@ function CoolingTable:OnCoolTriggered(player: Player)
     
     CoolPottery:Call(stationId):After(function(passed, result)
         if not passed or not result then
-            warn("CoolingTable: CoolPottery call failed")
+            --warn("CoolingTable: CoolPottery call failed")
             return
         end
         
         if result.success then
-            print("Pottery placed on cooling table, slot:", result.slotIndex)
         else
             local errorType = result.error
             if errorType == "NoPotteryEquipped" then
-                warn("You need to hold unfired pottery!")
+                --warn("You need to hold unfired pottery!")
             elseif errorType == "NotPottery" then
-                warn("That's not a pottery item!")
-            elseif errorType == "AlreadyFired" then
-                warn("This pottery is already fired!")
+                --warn("That's not a pottery item!")
+            elseif errorType == "AlreadyCooled" then
+                --warn("This pottery is already cooled!")
             elseif errorType == "NoSlotsAvailable" then
-                warn("No cooling slots available!")
+                --warn("No cooling slots available!")
             else
-                warn("Failed to cool pottery:", errorType or "Unknown error")
+                --warn("Failed to cool pottery:", errorType or "Unknown error")
             end
         end
     end)
@@ -655,12 +640,11 @@ function CoolingTable:OnCollectTriggered(player: Player, slotIndex: number)
     
     CollectPottery:Call(stationId, slotIndex):After(function(passed, result)
         if not passed or not result then
-            warn("CoolingTable: CollectPottery call failed")
+            --warn("CoolingTable: CollectPottery call failed")
             return
         end
         
         if result.success then
-            print("Collected cooled pottery:", result.styleKey)
             -- Refresh UI after successful collection
             task.defer(function()
                 if CoolingTableUI:GetVisible() then
@@ -670,11 +654,11 @@ function CoolingTable:OnCollectTriggered(player: Player, slotIndex: number)
         else
             local errorType = result.error
             if errorType == "NotReady" then
-                warn("Pottery is still cooling!")
+                --warn("Pottery is still cooling!")
             elseif errorType == "NoItemInSlot" then
-                warn("No pottery in this slot!")
+                --warn("No pottery in this slot!")
             else
-                warn("Failed to collect pottery:", errorType or "Unknown error")
+                --warn("Failed to collect pottery:", errorType or "Unknown error")
             end
         end
     end)
@@ -685,12 +669,11 @@ function CoolingTable:OnDeleteTriggered(player: Player, slotIndex: number)
     
     DeletePottery:Call(stationId, slotIndex):After(function(passed, result)
         if not passed or not result then
-            warn("CoolingTable: DeletePottery call failed")
+            --warn("CoolingTable: DeletePottery call failed")
             return
         end
         
         if result.success then
-            print("Deleted pottery from cooling table:", result.styleKey)
             -- Refresh UI after successful deletion
             task.defer(function()
                 if CoolingTableUI:GetVisible() then
@@ -700,9 +683,9 @@ function CoolingTable:OnDeleteTriggered(player: Player, slotIndex: number)
         else
             local errorType = result.error
             if errorType == "NoItemInSlot" then
-                warn("No pottery in this slot!")
+                --warn("No pottery in this slot!")
             else
-                warn("Failed to delete pottery:", errorType or "Unknown error")
+                --warn("Failed to delete pottery:", errorType or "Unknown error")
             end
         end
     end)

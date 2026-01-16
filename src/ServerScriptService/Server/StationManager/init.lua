@@ -50,10 +50,9 @@ function StationManager:UpdateStationData(player, stationType, key, value)
     
     if activeStations[stationKey] then
         activeStations[stationKey][key] = value
-        print("StationManager: Setting replica path", {"activeStations", stationKey, key}, "to", value)
         StationManager.stationReplica:Set({"activeStations", stationKey, key}, value)
     else
-        warn("StationManager: No active station found for", stationKey)
+        --warn("StationManager: No active station found for", stationKey)
     end
 end
 

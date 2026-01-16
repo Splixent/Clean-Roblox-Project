@@ -20,8 +20,8 @@ local Functions = {}
 
 -- Constants
 Functions.MAX_HOTBAR_SLOTS = 10
-Functions.SLOT_SIZE_NORMAL = UDim2.fromScale(0.0799361, 0.8)
-Functions.SLOT_SIZE_EQUIPPED = UDim2.fromScale(0.0899361, 0.9)
+Functions.SLOT_SIZE_NORMAL = UDim2.fromOffset(90, 90)
+Functions.SLOT_SIZE_EQUIPPED = UDim2.fromOffset(100, 100)
 
 Functions.KEY_MAP = {
     [Enum.KeyCode.One] = 1,

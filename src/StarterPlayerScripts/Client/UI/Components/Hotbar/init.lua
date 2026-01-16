@@ -1,3 +1,4 @@
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
@@ -13,12 +14,37 @@ for i = 1, Functions.MAX_HOTBAR_SLOTS do
     table.insert(slotChildren, Functions:CreateSlot(i))
 end
 
+-- Track viewport size for responsive positioning
+local ViewportSize = scope:Value(workspace.CurrentCamera.ViewportSize)
+
+-- Listen for viewport size changes
+workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+    ViewportSize:set(workspace.CurrentCamera.ViewportSize)
+end)
+
+-- Compute position based on aspect ratio
+local HotbarPosition = scope:Computed(function(use)
+    local size = use(ViewportSize)
+    local aspectRatio = size.X / size.Y
+    
+    -- 16:9 aspect ratio is approximately 1.78
+    -- iPhone aspect ratios are typically wider (around 2.16 for newer models)
+    if aspectRatio > 1.9 then
+        -- Wider screens (iPhone, ultrawide) - position higher
+        return UDim2.fromScale(0.5, 0.85)
+    else
+        -- Standard 16:9 and narrower - position lower
+        return UDim2.fromScale(0.5, 0.904)
+    end
+end)
+
 return scope:New "Frame" {
     Name = "Hotbar",
     AnchorPoint = Vector2.new(0.5, 0.5),
     BackgroundTransparency = 1,
-    Position = UDim2.fromScale(0.5, 0.931),
+    Position = HotbarPosition,
     Size = UDim2.fromScale(0.52125, 0.0926784),
+    ZIndex = 0,
 
     [Children] = {
         scope:New "UIListLayout" {
