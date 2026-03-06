@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rojo sourcemap default.project.json)",
+      "Bash(rojo sourcemap default.project.json -o sourcemap.json)",
+      "Bash(python3 -c \":*)"
+    ]
+  }
+}

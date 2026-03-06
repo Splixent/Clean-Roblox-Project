@@ -1,0 +1,9 @@
+# Project place file
+/Clean-Roblox-Project.rbxlx
+
+# Roblox Studio lock files
+/*.rbxlx.lock
+/*.rbxl.lock
+
+# Generated sourcemap
+sourcemap.json

@@ -1,0 +1,11 @@
+[package]
+name = "tomiokelana/clean-roblox-project"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+ByteNet = "ffrostflame/bytenet@0.4.5"
+Janitor = "howmanysmall/janitor@^1.17.0"
+Cmdr = "evaera/cmdr@1.12.0"
+Fusion = "elttob/fusion@0.3.0"
