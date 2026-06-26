@@ -14,12 +14,24 @@ local ScriptUtils = require(Shared.ScriptUtils)
 
 local PlayerEntityManager = {}
 
+-- ReplicaServer.Token writes the token name into a module-level Tokens set
+-- and never frees it on Replica:Destroy, so a rejoin (same UserId, new
+-- Player instance) trying to mint "states<userId>" a second time errors
+-- with "duplicate". Cache by UserId at module scope and reuse — same fix
+-- pattern as Server.Datastore.DataObject.
+local tokenCache: { [number]: any } = {}
+
 function PlayerEntityManager.new(player: Player?, extraInfo: boolean?): any
     assert(player, "Player is nil")
     if PlayerEntityManager[player] == nil then
         local PlayerEntityInfo = {}
+        local stateToken = tokenCache[player.UserId]
+        if stateToken == nil then
+            stateToken = Replica.Token("states"..player.UserId)
+            tokenCache[player.UserId] = stateToken
+        end
         PlayerEntityInfo.Replica = Replica.New({
-            Token = Replica.Token("states"..player.UserId),
+            Token = stateToken,
             Data = ScriptUtils:DeepCopy(Constants.states),
         })
         if Replica.ReadyPlayers[player] then

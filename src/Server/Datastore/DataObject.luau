@@ -58,17 +58,33 @@ type PlayerDataObject = {
 }
 
 type DataObjectModule = {
-    [Player]: PlayerDataObject
+    [Player]: PlayerDataObject,
+    new: (player: Player, extraInfo: boolean?, loadedData: {[any]: any}?) -> (PlayerDataObject | {[any]: any}),
 }
 
 local DataObject: DataObjectModule = {} :: any
+
+-- ReplicaServer.Token writes the token name into a module-level Tokens set
+-- and NEVER clears it — there's no "free" path even after the corresponding
+-- Replica is :Destroy()'d. When a player rejoins the same server session
+-- (same UserId, new Player instance), the prior session's "dataKey<userId>"
+-- entry is still in that set, so a fresh ReplicaService.Token(...) errors
+-- with "duplicate". Cache the token by UserId at module scope so the rejoin
+-- path reuses the one we already minted — the Token object is just a name +
+-- identity table; the Replica it backed has been destroyed but the name slot
+-- stays ours.
+local tokenCache: { [number]: ReplicaToken } = {}
 
 function DataObject.new(player: Player, extraInfo: boolean?, loadedData: {[any]: any}?): PlayerDataObject | {[any]: any}
     assert(player, "player is nil")
 
     if DataObject[player] == nil and loadedData ~= nil then
-        local classToken: ReplicaToken = (ReplicaService :: any).Token("dataKey" .. player.UserId)
-        
+        local classToken: ReplicaToken = tokenCache[player.UserId]
+        if classToken == nil then
+            classToken = (ReplicaService :: any).Token("dataKey" .. player.UserId)
+            tokenCache[player.UserId] = classToken
+        end
+
         DataObject[player] = {
             Replica = (ReplicaService :: any).New({
                 Token = classToken,
@@ -93,16 +109,17 @@ function DataObject.new(player: Player, extraInfo: boolean?, loadedData: {[any]:
 end
 
 Players.PlayerRemoving:Connect(function(player: Player)
-    local playerDataObject = DataObject.new(player, true) :: PlayerDataObject
-    local replica: Replica = playerDataObject.Replica
-    
     assert(player, "player is nil")
-    assert(replica, "replica is nil")
 
-    replica:Destroy()
-    if DataObject[player] ~= nil then
-        DataObject[player] = nil
+    -- Direct index (not DataObject.new) — calling .new here for a player whose
+    -- entry was already cleared would fall into its `repeat task.wait() until
+    -- DataObject[player] ~= nil` loop and hang this handler forever, leaking
+    -- the replica + token. Just look it up and destroy if present.
+    local playerDataObject = DataObject[player]
+    if playerDataObject and playerDataObject.Replica then
+        playerDataObject.Replica:Destroy()
     end
+    DataObject[player] = nil
 end)
 
 return DataObject

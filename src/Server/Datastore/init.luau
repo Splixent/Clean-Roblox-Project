@@ -91,7 +91,10 @@ Players.PlayerRemoving:Connect(function(player: Player?)
     assert(player, "player is nil")
 
     local profile = Profiles[player]
-    DataObject[player] = nil
+    -- NOTE: Do NOT set DataObject[player] = nil here.
+    -- DataObject's own PlayerRemoving handler destroys the replica and clears
+    -- the entry. Clearing it here first orphans the replica so its token is
+    -- never freed, causing "duplicate" errors on rejoin.
 
     if profile then
         profile.Data.loginInfo.totalPlaytime += (os.time() -  profile.Data.loginInfo.lastLogin)
@@ -100,6 +103,8 @@ Players.PlayerRemoving:Connect(function(player: Player?)
     if profile ~= nil then
         profile:EndSession()
     end
+
+    Datastore[player] = nil
 end)
 
 return Datastore
